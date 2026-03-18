@@ -1,3 +1,5 @@
+#descripción de las dependencia
+
 [project]
 name = "proyecto-isabelle"
 version = "0.1.0"
@@ -5,7 +7,8 @@ description = "Add your description here"
 readme = "README.md"
 authors = [
     { name = "Miguel González Duque", email = "miguelgondu@gmail.com" },
-    { name = "Thomas Jaramillo Aguirre", email = "tjaramilloa@unal.edu.co" }
+    { name = "Thomas Jaramillo Aguirre", email = "tjaramilloa@unal.edu.co" },
+    {name = "Jacobo Valencia lópez", email = "jacoval31@gmail.com"}
 ]
 requires-python = ">=3.13"
 dependencies = []
