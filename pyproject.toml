@@ -1,5 +1,3 @@
-#descripción de las dependencia
-
 [project]
 name = "proyecto-isabelle"
 version = "0.1.0"
