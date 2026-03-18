@@ -5,6 +5,9 @@ build/
 dist/
 wheels/
 *.egg-info
+RVC3-python.code-workspace
+uv.lock
+
 
 # Virtual environments
 .venv
