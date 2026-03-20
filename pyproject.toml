@@ -17,3 +17,9 @@ proyecto-isabelle = "proyecto_isabelle:main"
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.2.0",
+    "ipython>=9.11.0",
+]
