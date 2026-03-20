@@ -27,4 +27,8 @@ def save_text(text: str, path: Path | str) -> None:
     Esta función guarda el texto en un archivo en path
     especificado.
     """
-    ...
+
+
+    #Se crea el archivo en la ruta correspondiente si no existe y se escribe en el"
+    with open(path,"w",encoding="utf-8") as archivo:
+        archivo.write(text)
