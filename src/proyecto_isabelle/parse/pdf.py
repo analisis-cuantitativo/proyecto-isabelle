@@ -20,3 +20,11 @@ def load_text(pdf_path: str | Path, pages: list[int] | None = None) -> str:
     else:
         text_parts = [reader.pages[i].extract_text() for i in pages]
     return "\n".join(text_parts)
+
+
+def save_text(text: str, path: Path | str) -> None:
+    """
+    Esta función guarda el texto en un archivo en path
+    especificado.
+    """
+    ...
