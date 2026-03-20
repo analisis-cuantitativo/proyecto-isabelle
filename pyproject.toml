@@ -9,7 +9,9 @@ authors = [
     {name = "Jacobo Valencia lópez", email = "jacoval31@gmail.com"}
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "pypdf>=6.9.1",
+]
 
 [project.scripts]
 proyecto-isabelle = "proyecto_isabelle:main"
