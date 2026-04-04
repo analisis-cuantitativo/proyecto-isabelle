@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 
 from proyecto_isabelle.parse import thy
 
+DEFAULT_TIMEOUT = 60
+
 
 class IsabelleRequest(BaseModel):
     """Request model for proof verification."""
@@ -43,16 +45,24 @@ class IsabelleResponse(BaseModel):
     message: str = Field(..., description="Human-readable message about the result")
 
 
-def _verify_server_is_running(api_url: str) -> None: ...
+def _verify_server_is_running(api_url: str = "http://localhost:8000") -> None:
+    with httpx.Client(timeout=DEFAULT_TIMEOUT) as client:
+        resp = client.get(f"{api_url.rstrip('/')}/health")
+        resp.raise_for_status()
 
 
 def query_file(
     path: Path | str,
     api_url: str = "http://localhost:8000",
 ) -> IsabelleResponse:
-    _verify_server_is_running(api_url)
-
     content = thy.load_text(path)
+    return query_content(content, api_url=api_url)
+
+
+def query_content(
+    content: str, api_url: str = "http://localhost:8000"
+) -> IsabelleResponse:
+    _verify_server_is_running(api_url)
     payload = IsabelleRequest(thy_content=content)
 
     with httpx.Client(timeout=payload.timeout_seconds + 30) as client:
