@@ -1,0 +1,2 @@
+include:
+  - path: ./DeepIsaHOL/docker-compose.yml
