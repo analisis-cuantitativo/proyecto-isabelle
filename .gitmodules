@@ -1,0 +1,3 @@
+[submodule "DeepIsaHOL"]
+	path = DeepIsaHOL
+	url = git@github.com:miguelgondu/DeepIsaHOL.git
