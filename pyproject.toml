@@ -11,9 +11,14 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "httpx>=0.28.1",
-    "pydantic>=2.12.5",
-    "pypdf>=6.9.1",
+    "litellm>=1.30.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.0",
+    "pypdf>=6.0.0",
 ]
+
+[tool.uv]
+exclude-newer = "2026-03-01"
 
 [project.scripts]
 proyecto-isabelle = "proyecto_isabelle:main"
@@ -25,5 +30,5 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "ipykernel>=7.2.0",
-    "ipython>=9.11.0",
+    "ipython>=9.0.0",
 ]
