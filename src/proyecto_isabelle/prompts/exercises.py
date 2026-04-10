@@ -1,3 +1,5 @@
+import re
+
 PROMPT_FOR_EXERCISES = """\
 You are an expert in formal mathematics and the Isabelle proof assistant.
 Your task is to formalize and prove the following mathematical statement in Isabelle/HOL.
@@ -28,3 +30,15 @@ end
 
 {exercise}
 """
+
+
+def extract_thy_content(response: str) -> str | None:
+    """Extract the .thy file content from an LLM response.
+
+    Looks for code blocks marked with ```isabelle or ``` and extracts the content.
+    """
+    pattern = r"```(?:isabelle|thy)?\s*\n(.*?)\n```"
+    match = re.search(pattern, response, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return None

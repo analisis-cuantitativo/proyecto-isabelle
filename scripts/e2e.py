@@ -2,42 +2,17 @@
 One end-to-end example in which we ask an LLM to prove a theorem.
 """
 
-import hashlib
 import json
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from proyecto_isabelle.parse.markdown import load_text
-from proyecto_isabelle.prompts import PROMPT_FOR_EXERCISES
+from proyecto_isabelle.parse import thy, markdown
+from proyecto_isabelle.prompts import PROMPT_FOR_EXERCISES, extract_thy_content
 from proyecto_isabelle.query.isabelle import query_content
 from proyecto_isabelle.query.llm import ask
+from proyecto_isabelle.util import generate_hash, sanitize_model_name
 
 PROOFS_DIR = Path(__file__).parent.parent / "data" / "proofs"
-
-
-def extract_thy_content(response: str) -> str | None:
-    """Extract the .thy file content from an LLM response.
-
-    Looks for code blocks marked with ```isabelle or ``` and extracts the content.
-    """
-    # Try to match ```isabelle ... ``` first
-    pattern = r"```(?:isabelle|thy)?\s*\n(.*?)\n```"
-    match = re.search(pattern, response, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    return None
-
-
-def sanitize_model_name(model: str) -> str:
-    """Convert model name to a valid directory name."""
-    return model.replace("/", "_").replace(":", "_")
-
-
-def generate_proof_hash(thy_content: str, timestamp: str) -> str:
-    """Generate a short hash for the proof based on content and timestamp."""
-    combined = f"{thy_content}{timestamp}"
-    return hashlib.sha256(combined.encode()).hexdigest()[:12]
 
 
 def save_proof(
@@ -51,7 +26,7 @@ def save_proof(
 ) -> Path:
     """Save the proof and metadata to disk."""
     timestamp = datetime.now(timezone.utc).isoformat()
-    proof_hash = generate_proof_hash(thy_content, timestamp)
+    proof_hash = generate_hash(thy_content, timestamp)
 
     # Create exercise/model directory structure
     exercise_name = exercise_path.stem
@@ -62,7 +37,7 @@ def save_proof(
 
     # Save the .thy file
     thy_path = proof_dir / f"{proof_hash}.thy"
-    thy_path.write_text(thy_content)
+    thy.save_text(thy_content, thy_path)
 
     # Save metadata as JSON
     metadata = {
@@ -83,8 +58,10 @@ def save_proof(
 
 def main() -> None:
     # Load the exercise
-    exercise_path = Path(__file__).parent.parent / "data/raw/exercises/injectivity.md"
-    exercise = load_text(exercise_path)
+    exercise_path = (
+        Path(__file__).parent.parent / "data" / "raw" / "exercises" / "injectivity.md"
+    )
+    exercise = markdown.load_text(exercise_path)
     print(f"Loaded exercise:\n{exercise}\n")
 
     # Create the prompt
