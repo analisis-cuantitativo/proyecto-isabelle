@@ -20,9 +20,16 @@ Además, para poder correr el servidor de Isabelle, necesitarás tener `docker` 
 git submodule update --init --recursive
 ```
 
-Después de esto, ya podrás ver el código de DeepIsaHOL
-en la carpeta correspondiente. Para iniciar el servidor,
-puedes correr
+Construyamos la imagen de DeepIsaHOL yendo a su carpeta y
+construyéndola:
 ```bash
+cd DeepIsaHOL
 docker-compose up
+```
+
+Después de esto, ya se podrá correr el `scripts/e2e.py`.
+Para poder usarlo, necesitarán exportar las llaves que están
+en el `.env` file. Eso lo pueden hacer con:
+```bash
+set -a && source .env && set +a
 ```

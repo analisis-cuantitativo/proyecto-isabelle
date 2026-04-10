@@ -10,7 +10,7 @@ from proyecto_isabelle.parse import thy, markdown
 from proyecto_isabelle.prompts import PROMPT_FOR_EXERCISES, extract_thy_content
 from proyecto_isabelle.query.isabelle import query_content
 from proyecto_isabelle.query.llm import ask
-from proyecto_isabelle.util import generate_hash, sanitize_model_name
+from proyecto_isabelle.util import generate_hash, sanitize_model_name, ROOT_DIR
 
 PROOFS_DIR = Path(__file__).parent.parent / "data" / "proofs"
 
@@ -66,9 +66,7 @@ def save_proof(
 
 def main() -> None:
     # Load the exercise
-    exercise_path = (
-        Path(__file__).parent.parent / "data" / "raw" / "exercises" / "injectivity.md"
-    )
+    exercise_path = ROOT_DIR / "data" / "raw" / "exercises" / "injectivity.md"
     exercise = markdown.load_text(exercise_path)
     print(f"Loaded exercise:\n{exercise}\n")
 
