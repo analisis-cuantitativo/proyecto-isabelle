@@ -26,6 +26,8 @@ begin
 end
 ```
 
+We recommend you use e.g. `<Rightarrow>` or `<longleftrightarrow>` or `<exists>` instead of the unicode alternatives.
+
 ## Mathematical Statement to Prove
 
 {exercise}

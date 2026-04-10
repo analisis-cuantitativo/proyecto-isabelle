@@ -24,6 +24,7 @@ def save_proof(
     errors: list[str],
     raw_response: str,
     thinking: str | None = None,
+    thinking_budget: int | None = None,
 ) -> Path:
     """Save the proof and metadata to disk."""
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -40,7 +41,12 @@ def save_proof(
     thy_path = proof_dir / f"{proof_hash}.thy"
     thy.save_text(thy_content, thy_path)
 
-    # Save metadata as JSON
+    # Save thinking to separate file if present
+    if thinking:
+        thinking_path = proof_dir / f"{proof_hash}.thinking.md"
+        thinking_path.write_text(thinking)
+
+    # Save metadata as JSON (without thinking content to avoid duplication)
     metadata = {
         "hash": proof_hash,
         "model": model,
@@ -50,7 +56,7 @@ def save_proof(
         "verified": verified,
         "errors": errors,
         "raw_response": raw_response,
-        "thinking": thinking,
+        "thinking_budget": thinking_budget,
     }
     meta_path = proof_dir / f"{proof_hash}.json"
     meta_path.write_text(json.dumps(metadata, indent=2))
@@ -71,13 +77,13 @@ def main() -> None:
 
     # Query the LLM (using Claude Sonnet with extended thinking)
     model = "anthropic/claude-sonnet-4-5-20250929"
-    thinking_budget = 10000
+    thinking_budget = 4096 // 4
     print(f"Querying {model} with thinking_budget={thinking_budget}...")
     response = ask(
         prompt=prompt,
         model=model,
         temperature=1.0,  # Required for extended thinking
-        max_tokens=16000,  # Must be > thinking_budget
+        max_tokens=4096,  # Must be > thinking_budget
         thinking_budget=thinking_budget,
     )
 
@@ -119,6 +125,7 @@ def main() -> None:
         errors=result.errors,
         raw_response=response.content or "",
         thinking=response.thinking,
+        thinking_budget=thinking_budget,
     )
     print(f"\nProof saved to: {saved_path}")
 

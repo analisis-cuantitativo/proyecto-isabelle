@@ -114,8 +114,29 @@ class LLMClient:
             if response.choices and len(response.choices) > 0:  # pyright: ignore
                 message = response.choices[0].message  # pyright: ignore
                 content = message.content
+
+                # Try different attributes where thinking might be stored
                 if hasattr(message, "thinking") and message.thinking:  # pyright: ignore
                     thinking = message.thinking  # pyright: ignore
+                elif (
+                    hasattr(message, "reasoning_content") and message.reasoning_content
+                ):  # pyright: ignore
+                    thinking = message.reasoning_content  # pyright: ignore
+
+                # Handle case where content is a list of content blocks (Anthropic format)
+                if isinstance(content, list):
+                    thinking_parts = []
+                    text_parts = []
+                    for block in content:
+                        if isinstance(block, dict):
+                            if block.get("type") == "thinking":
+                                thinking_parts.append(block.get("thinking", ""))
+                            elif block.get("type") == "text":
+                                text_parts.append(block.get("text", ""))
+                    if thinking_parts:
+                        thinking = "\n".join(thinking_parts)
+                    if text_parts:
+                        content = "\n".join(text_parts)
 
             return LLMResponse(
                 success=True,

@@ -1,0 +1,11 @@
+{
+  "hash": "385a2e48e980",
+  "model": "anthropic/claude-sonnet-4-5-20250929",
+  "timestamp": "2026-04-10T19:36:40.123180+00:00",
+  "exercise_path": "/Users/miguelgondu/Work/proyecto-isabelle/data/raw/exercises/injectivity.md",
+  "exercise": "Let $f:A\\to B$ be a function. Prove that f is injective if and only if there exists a function $g:B\\to A$ such that $g \\circ f$ is the identity function on $A$.\n",
+  "verified": true,
+  "errors": [],
+  "raw_response": "```isabelle\ntheory InjectiveLeftInverse\n  imports Main\nbegin\n\nlemma injective_iff_left_inverse:\n  fixes f :: \"'a \\<Rightarrow> 'b\"\n  shows \"inj f \\<longleftrightarrow> (\\<exists>g :: 'b \\<Rightarrow> 'a. \\<forall>x. g (f x) = x)\"\nproof\n  assume \"inj f\"\n  then show \"\\<exists>g :: 'b \\<Rightarrow> 'a. \\<forall>x. g (f x) = x\"\n  proof -\n    (* We need to construct a left inverse g *)\n    (* For elements in the range of f, we can use inv_into to get a preimage *)\n    (* For elements outside the range, we pick an arbitrary element (using SOME) *)\n    obtain a0 :: 'a where \"True\" by auto\n    define g :: \"'b \\<Rightarrow> 'a\" where \n      \"g = (\\<lambda>y. if y \\<in> range f then inv_into UNIV f y else a0)\"\n    \n    have \"\\<forall>x. g (f x) = x\"\n    proof\n      fix x :: 'a\n      have \"f x \\<in> range f\" by auto\n      then have \"g (f x) = inv_into UNIV f (f x)\" \n        unfolding g_def by simp\n      also have \"... = x\"\n        using \\<open>inj f\\<close> by (simp add: inv_into_f_f)\n      finally show \"g (f x) = x\" .\n    qed\n    thus ?thesis by blast\n  qed\nnext\n  assume \"\\<exists>g :: 'b \\<Rightarrow> 'a. \\<forall>x. g (f x) = x\"\n  then obtain g :: \"'b \\<Rightarrow> 'a\" where g_prop: \"\\<forall>x. g (f x) = x\" by blast\n  \n  show \"inj f\"\n  proof (rule injI)\n    fix x y :: 'a\n    assume \"f x = f y\"\n    then have \"g (f x) = g (f y)\" by simp\n    with g_prop show \"x = y\" by simp\n  qed\nqed\n\nend\n```",
+  "thinking": null
+}

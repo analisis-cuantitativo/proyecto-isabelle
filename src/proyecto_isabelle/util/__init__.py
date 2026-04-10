@@ -1,12 +1,5 @@
-import hashlib
+from proyecto_isabelle.util.sanitize import sanitize_model_name
+from proyecto_isabelle.util.hash import generate_hash
+from proyecto_isabelle.util.constants import ROOT_DIR, MODELS
 
-
-def sanitize_model_name(model: str) -> str:
-    """Convert model name to a valid directory name."""
-    return model.replace("/", "_").replace(":", "_")
-
-
-def generate_hash(content: str, timestamp: str) -> str:
-    """Generate a short hash based on content and timestamp."""
-    combined = f"{content}{timestamp}"
-    return hashlib.sha256(combined.encode()).hexdigest()[:12]
+__all__ = ["sanitize_model_name", "generate_hash", "ROOT_DIR", "MODELS"]
