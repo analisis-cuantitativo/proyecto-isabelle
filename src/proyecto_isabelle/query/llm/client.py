@@ -100,21 +100,22 @@ class LLMClient:
 
             # Extract usage info
             usage = None
-            if hasattr(response, "usage") and response.usage:
+            if hasattr(response, "usage") and response.usage:  # pyright: ignore
                 usage = TokenUsage(
-                    prompt_tokens=response.usage.prompt_tokens or 0,
-                    completion_tokens=response.usage.completion_tokens or 0,
-                    total_tokens=response.usage.total_tokens or 0,
+                    prompt_tokens=response.usage.prompt_tokens or 0,  # pyright: ignore
+                    completion_tokens=response.usage.completion_tokens  # pyright: ignore
+                    or 0,
+                    total_tokens=response.usage.total_tokens or 0,  # pyright: ignore
                 )
 
             # Extract content and thinking
             content = None
             thinking = None
-            if response.choices and len(response.choices) > 0:
-                message = response.choices[0].message
+            if response.choices and len(response.choices) > 0:  # pyright: ignore
+                message = response.choices[0].message  # pyright: ignore
                 content = message.content
-                if hasattr(message, "thinking") and message.thinking:
-                    thinking = message.thinking
+                if hasattr(message, "thinking") and message.thinking:  # pyright: ignore
+                    thinking = message.thinking  # pyright: ignore
 
             return LLMResponse(
                 success=True,
@@ -124,25 +125,25 @@ class LLMClient:
                 usage=usage,
             )
 
-        except litellm.AuthenticationError as e:
+        except litellm.exceptions.AuthenticationError as e:
             return LLMResponse(
                 success=False,
                 error=f"Authentication failed: {e}",
                 model=model,
             )
-        except litellm.BadRequestError as e:
+        except litellm.exceptions.BadRequestError as e:
             return LLMResponse(
                 success=False,
                 error=f"Bad request: {e}",
                 model=model,
             )
-        except litellm.RateLimitError as e:
+        except litellm.exceptions.RateLimitError as e:
             return LLMResponse(
                 success=False,
                 error=f"Rate limit exceeded: {e}",
                 model=model,
             )
-        except litellm.APIConnectionError as e:
+        except litellm.exceptions.APIConnectionError as e:
             return LLMResponse(
                 success=False,
                 error=f"Connection error: {e}",
