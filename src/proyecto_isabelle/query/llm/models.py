@@ -35,6 +35,7 @@ class LLMResponse(BaseModel):
 
     success: bool
     content: str | None = None
+    thinking: str | None = None
     model: str | None = None
     usage: TokenUsage | None = None
     error: str | None = None

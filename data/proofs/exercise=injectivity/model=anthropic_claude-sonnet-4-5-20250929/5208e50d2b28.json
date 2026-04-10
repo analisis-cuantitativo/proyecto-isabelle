@@ -1,0 +1,33 @@
+{
+  "hash": "5208e50d2b28",
+  "model": "anthropic/claude-sonnet-4-5-20250929",
+  "timestamp": "2026-04-10T19:17:51.612320+00:00",
+  "exercise_path": "/Users/miguelgondu/Work/proyecto-isabelle/data/raw/exercises/injectivity.md",
+  "exercise": "Let $f:A\\to B$ be a function. Prove that f is injective if and only if there exists a function $g:B\\to A$ such that $g \\circ f$ is the identity function on $A$.\n",
+  "verified": false,
+  "errors": [
+    "Error at 'theorem injective_iff_left_inverse:\n  fixes f :: \"'a => 'b\"\n...': 5070200: Bad context for command \"proof\" (line 4)",
+    "Error at '  assume inj_f: \"inj f\"\n  define g where \"g = (%y. SOME x. f...': 5070216: Bad context for command \"define\" (line 2)",
+    "Error at '  have \"!x. g (f x) = x\"\n  proof': 5070220: Bad context for command \"proof\" (line 2)",
+    "Error at '    fix x': 5070222: Bad context for command \"fix\" (line 1)",
+    "Error at '    have \"f (SOME x'. f x' = f x) = f x\"\n      by (rule some...': 5070226: Bad context for command \"by\" (line 2)",
+    "Error at '    with inj_f have \"(SOME x'. f x' = f x) = x\"': 5070230: Bad context for command \"have\" (line 1)",
+    "Error at '      unfolding inj_def by auto': 5070234: Bad context for command \"by\" (line 1)",
+    "Error at '    thus \"g (f x) = x\"': 5070236: Bad context for command \"thus\" (line 1)",
+    "Error at '      unfolding g_def by simp': 5070240: Bad context for command \"by\" (line 1)",
+    "Error at '  qed': 5070242: Bad context for command \"qed\" (line 1)",
+    "Error at '  thus \"?g. !x. g (f x) = x\" by blast': 5070246: Bad context for command \"by\" (line 1)",
+    "Error at 'next': 5070248: Bad context for command \"next\" (line 1)",
+    "Error at '  assume \"?g. !x. g (f x) = x\"\n  then obtain g where g_left_...': 5070256: Bad context for command \"by\" (line 2)",
+    "Error at '  show \"inj f\"': 5070258: Bad context for command \"show\" (line 1)",
+    "Error at '    unfolding inj_def\n  proof (intro allI impI)': 5070262: Bad context for command \"proof\" (line 2)",
+    "Error at '    fix x y': 5070264: Bad context for command \"fix\" (line 1)",
+    "Error at '    assume \"f x = f y\"': 5070266: Bad context for command \"assume\" (line 1)",
+    "Error at '    hence \"g (f x) = g (f y)\" by simp': 5070270: Bad context for command \"by\" (line 1)",
+    "Error at '    with g_left_inv show \"x = y\" by simp': 5070276: Bad context for command \"by\" (line 1)",
+    "Error at '  qed': 5070278: Bad context for command \"qed\" (line 1)",
+    "Error at 'qed': 5070280: Bad context for command \"qed\" (line 1)"
+  ],
+  "raw_response": "```isabelle\ntheory InjectiveLeftInverse\n  imports Main\nbegin\n\ntheorem injective_iff_left_inverse:\n  fixes f :: \"'a \u21d2 'b\"\n  shows \"inj f \u27f7 (\u2203g. \u2200x. g (f x) = x)\"\nproof\n  (* Forward direction: injective implies left inverse exists *)\n  assume inj_f: \"inj f\"\n  \n  (* Define g using Hilbert's choice operator *)\n  define g where \"g = (\u03bby. SOME x. f x = y)\"\n  \n  (* Show that g is a left inverse of f *)\n  have \"\u2200x. g (f x) = x\"\n  proof\n    fix x\n    have \"f (SOME x'. f x' = f x) = f x\"\n      by (rule someI[of \"\u03bbx'. f x' = f x\" x]) simp\n    with inj_f have \"(SOME x'. f x' = f x) = x\"\n      unfolding inj_def by auto\n    thus \"g (f x) = x\"\n      unfolding g_def by simp\n  qed\n  thus \"\u2203g. \u2200x. g (f x) = x\" by blast\nnext\n  (* Backward direction: left inverse exists implies injective *)\n  assume \"\u2203g. \u2200x. g (f x) = x\"\n  then obtain g where g_left_inv: \"\u2200x. g (f x) = x\" by blast\n  \n  show \"inj f\"\n    unfolding inj_def\n  proof (intro allI impI)\n    fix x y\n    assume \"f x = f y\"\n    hence \"g (f x) = g (f y)\" by simp\n    with g_left_inv show \"x = y\" by simp\n  qed\nqed\n\nend\n```",
+  "thinking": null
+}

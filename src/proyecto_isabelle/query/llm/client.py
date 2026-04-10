@@ -51,6 +51,7 @@ class LLMClient:
         temperature: float = 0.7,
         max_tokens: int | None = None,
         stop: list[str] | None = None,
+        thinking_budget: int | None = None,
     ) -> LLMResponse:
         """Send a completion request to the LLM.
 
@@ -60,6 +61,9 @@ class LLMClient:
             temperature: Sampling temperature (0.0 to 2.0).
             max_tokens: Maximum tokens in the response.
             stop: Stop sequences.
+            thinking_budget: Token budget for extended thinking (Claude only).
+                If provided, enables extended thinking with the specified budget.
+                max_tokens must be greater than thinking_budget.
 
         Returns:
             LLMResponse with the completion result.
@@ -86,6 +90,11 @@ class LLMClient:
                 kwargs["stop"] = stop
             if base_url is not None:
                 kwargs["api_base"] = base_url
+            if thinking_budget is not None:
+                kwargs["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": thinking_budget,
+                }
 
             response = litellm.completion(**kwargs)
 
@@ -98,14 +107,19 @@ class LLMClient:
                     total_tokens=response.usage.total_tokens or 0,
                 )
 
-            # Extract content
+            # Extract content and thinking
             content = None
+            thinking = None
             if response.choices and len(response.choices) > 0:
-                content = response.choices[0].message.content
+                message = response.choices[0].message
+                content = message.content
+                if hasattr(message, "thinking") and message.thinking:
+                    thinking = message.thinking
 
             return LLMResponse(
                 success=True,
                 content=content,
+                thinking=thinking,
                 model=response.model,
                 usage=usage,
             )
@@ -148,6 +162,7 @@ class LLMClient:
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        thinking_budget: int | None = None,
     ) -> LLMResponse:
         """Convenience method for single-turn conversations.
 
@@ -157,6 +172,7 @@ class LLMClient:
             model: Model identifier. If not provided, uses default from config.
             temperature: Sampling temperature (0.0 to 2.0).
             max_tokens: Maximum tokens in the response.
+            thinking_budget: Token budget for extended thinking (Claude only).
 
         Returns:
             LLMResponse with the completion result.
@@ -173,6 +189,7 @@ class LLMClient:
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
+            thinking_budget=thinking_budget,
         )
 
 
@@ -200,6 +217,7 @@ def complete(
     temperature: float = 0.7,
     max_tokens: int | None = None,
     stop: list[str] | None = None,
+    thinking_budget: int | None = None,
 ) -> LLMResponse:
     """Module-level complete function using the global client.
 
@@ -209,6 +227,7 @@ def complete(
         temperature: Sampling temperature (0.0 to 2.0).
         max_tokens: Maximum tokens in the response.
         stop: Stop sequences.
+        thinking_budget: Token budget for extended thinking (Claude only).
 
     Returns:
         LLMResponse with the completion result.
@@ -219,6 +238,7 @@ def complete(
         temperature=temperature,
         max_tokens=max_tokens,
         stop=stop,
+        thinking_budget=thinking_budget,
     )
 
 
@@ -228,6 +248,7 @@ def ask(
     model: str | None = None,
     temperature: float = 0.7,
     max_tokens: int | None = None,
+    thinking_budget: int | None = None,
 ) -> LLMResponse:
     """Module-level ask function using the global client.
 
@@ -237,6 +258,7 @@ def ask(
         model: Model identifier. If not provided, uses default from config.
         temperature: Sampling temperature (0.0 to 2.0).
         max_tokens: Maximum tokens in the response.
+        thinking_budget: Token budget for extended thinking (Claude only).
 
     Returns:
         LLMResponse with the completion result.
@@ -247,4 +269,5 @@ def ask(
         model=model,
         temperature=temperature,
         max_tokens=max_tokens,
+        thinking_budget=thinking_budget,
     )

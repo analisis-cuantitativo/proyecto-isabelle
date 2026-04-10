@@ -23,6 +23,7 @@ def save_proof(
     verified: bool,
     errors: list[str],
     raw_response: str,
+    thinking: str | None = None,
 ) -> Path:
     """Save the proof and metadata to disk."""
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -49,6 +50,7 @@ def save_proof(
         "verified": verified,
         "errors": errors,
         "raw_response": raw_response,
+        "thinking": thinking,
     }
     meta_path = proof_dir / f"{proof_hash}.json"
     meta_path.write_text(json.dumps(metadata, indent=2))
@@ -67,14 +69,16 @@ def main() -> None:
     # Create the prompt
     prompt = PROMPT_FOR_EXERCISES.format(exercise=exercise)
 
-    # Query the LLM (using Claude Sonnet)
+    # Query the LLM (using Claude Sonnet with extended thinking)
     model = "anthropic/claude-sonnet-4-5-20250929"
-    print(f"Querying {model}...")
+    thinking_budget = 10000
+    print(f"Querying {model} with thinking_budget={thinking_budget}...")
     response = ask(
         prompt=prompt,
         model=model,
-        temperature=0.0,
-        max_tokens=4096,
+        temperature=1.0,  # Required for extended thinking
+        max_tokens=16000,  # Must be > thinking_budget
+        thinking_budget=thinking_budget,
     )
 
     if not response.success:
@@ -82,6 +86,8 @@ def main() -> None:
         return
 
     print(f"LLM response received (tokens used: {response.usage})\n")
+    if response.thinking:
+        print(f"Thinking:\n{response.thinking}\n")
     print(f"Raw response:\n{response.content}\n")
 
     # Extract the .thy content
@@ -112,6 +118,7 @@ def main() -> None:
         verified=result.verified,
         errors=result.errors,
         raw_response=response.content or "",
+        thinking=response.thinking,
     )
     print(f"\nProof saved to: {saved_path}")
 
