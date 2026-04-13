@@ -44,7 +44,10 @@ def save_proof(
     # Save thinking to separate file if present
     if thinking:
         thinking_path = proof_dir / f"{proof_hash}.thinking.md"
-        thinking_path.write_text(thinking)
+        try:
+            thinking_path.write_text(thinking)
+        except UnicodeEncodeError as e:
+            print(f"Couldn't save the thinking thread {thinking}.\n\n{e}")
 
     # Save metadata as JSON (without thinking content to avoid duplication)
     metadata = {
@@ -66,7 +69,9 @@ def save_proof(
 
 def main() -> None:
     # Load the exercise
-    exercise_path = ROOT_DIR / "data" / "raw" / "exercises" / "injectivity.md"
+    exercise_path = (
+        ROOT_DIR / "data" / "raw" / "exercises" / "uniqueness_of_the_empty_set.md"
+    )
     exercise = markdown.load_text(exercise_path)
     print(f"Loaded exercise:\n{exercise}\n")
 
