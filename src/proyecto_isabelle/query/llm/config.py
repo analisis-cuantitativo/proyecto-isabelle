@@ -25,7 +25,7 @@ class LLMConfig(BaseSettings):
     lm_studio_base_url: str = "http://localhost:1234/v1"
 
     # Defaults
-    llm_default_model: str = "gpt-4o-mini"
+    llm_default_model: str = "openai/gpt-4o-mini"
     llm_default_timeout: int = 60
 
 
