@@ -1,6 +1,6 @@
 """LLM router submodule providing a unified interface for multiple LLM providers.
 
-This module uses LiteLLM internally to support OpenAI, Anthropic, Gemini,
+This module uses the anthropic and openai SDKs to support Anthropic, OpenAI,
 Ollama, and LM Studio through a consistent Pydantic-based interface.
 
 Example usage:
@@ -13,7 +13,7 @@ Example usage:
     # With specific model and system prompt
     response = llm.ask(
         "Explain this theorem",
-        model="claude-3-opus-20240229",
+        model="anthropic/claude-sonnet-4-5-20250929",
         system="You are a math expert."
     )
 
@@ -24,12 +24,11 @@ Example usage:
         Message(role="system", content="You are helpful."),
         Message(role="user", content="Hello!"),
     ]
-    response = complete(messages)
+    response = complete(messages, model="openai/gpt-4o")
 
-Model name conventions:
-    - OpenAI: gpt-4, gpt-4o-mini
-    - Anthropic: claude-3-opus-20240229, claude-3-sonnet-20240229
-    - Gemini: gemini/gemini-pro
+Model name conventions (provider/model-name):
+    - Anthropic: anthropic/claude-sonnet-4-5-20250929, anthropic/claude-opus-4-5-20251101
+    - OpenAI: openai/gpt-4o, openai/gpt-4o-mini
     - Ollama: ollama/llama2, ollama/mistral
     - LM Studio: lm-studio/local-model
 """
