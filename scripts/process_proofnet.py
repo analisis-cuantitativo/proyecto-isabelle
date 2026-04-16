@@ -11,12 +11,14 @@ for path_ in proofnet_files:
         files_to_save.extend([json.loads(line) for line in fp.readlines()])
 
 for file_to_save in files_to_save:
-    with open(ROOT_DIR / "data" / "exercises" / f"{file_to_save['id']}.md", "w") as fp:
+    filename = file_to_save["id"].replace("|", "-")
+    with open(
+        ROOT_DIR / "data" / "exercises" / f"{filename}.md",
+        "w",
+    ) as fp:
         fp.write(file_to_save["nl_statement"])
 
-    with open(
-        ROOT_DIR / "data" / "exercises_with_proof" / f"{file_to_save['id']}.md", "w"
-    ) as fp:
+    with open(ROOT_DIR / "data" / "exercises_with_proof" / f"{filename}.md", "w") as fp:
         fp.write(
             file_to_save["nl_statement"] + "\n\nProof:\n" + file_to_save["nl_proof"]
         )

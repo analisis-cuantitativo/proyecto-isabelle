@@ -17,3 +17,4 @@ MODELS = [
 ]
 
 ROOT_DIR = Path(__file__).parent.parent.parent.parent
+PROOFS_DIR = ROOT_DIR / "data" / "proofs"
