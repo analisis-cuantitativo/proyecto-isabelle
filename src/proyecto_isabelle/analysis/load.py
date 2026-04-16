@@ -44,7 +44,8 @@ def success_rate_by_model(df: pd.DataFrame | None = None) -> pd.DataFrame:
     if df is None:
         df = load_proofs()
 
-    return duckdb.sql("""
+    return duckdb.sql(
+        """
         SELECT
             model,
             COUNT(*) as total,
@@ -53,7 +54,8 @@ def success_rate_by_model(df: pd.DataFrame | None = None) -> pd.DataFrame:
         FROM df
         GROUP BY model
         ORDER BY success_rate DESC
-    """).df()
+    """
+    ).df()
 
 
 def success_rate_by_exercise(df: pd.DataFrame | None = None) -> pd.DataFrame:
@@ -64,7 +66,8 @@ def success_rate_by_exercise(df: pd.DataFrame | None = None) -> pd.DataFrame:
     if df is None:
         df = load_proofs()
 
-    return duckdb.sql("""
+    return duckdb.sql(
+        """
         SELECT
             exercise,
             COUNT(*) as total,
@@ -73,7 +76,8 @@ def success_rate_by_exercise(df: pd.DataFrame | None = None) -> pd.DataFrame:
         FROM df
         GROUP BY exercise
         ORDER BY success_rate DESC
-    """).df()
+    """
+    ).df()
 
 
 def success_rate_by_model_and_exercise(df: pd.DataFrame | None = None) -> pd.DataFrame:
@@ -84,7 +88,8 @@ def success_rate_by_model_and_exercise(df: pd.DataFrame | None = None) -> pd.Dat
     if df is None:
         df = load_proofs()
 
-    return duckdb.sql("""
+    return duckdb.sql(
+        """
         SELECT
             model,
             exercise,
@@ -94,4 +99,5 @@ def success_rate_by_model_and_exercise(df: pd.DataFrame | None = None) -> pd.Dat
         FROM df
         GROUP BY model, exercise
         ORDER BY model, success_rate DESC
-    """).df()
+    """
+    ).df()
