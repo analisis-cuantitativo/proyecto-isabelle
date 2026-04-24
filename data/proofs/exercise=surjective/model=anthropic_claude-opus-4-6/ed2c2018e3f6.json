@@ -1,0 +1,25 @@
+{
+  "hash": "ed2c2018e3f6",
+  "model": "anthropic/claude-opus-4-6",
+  "timestamp": "2026-04-17T21:17:55.350654+00:00",
+  "exercise_path": "surjective.md",
+  "exercise": "Show that a function is surjective if and only if it has a right inverse.",
+  "verified": false,
+  "errors": [
+    "Error at '    unfolding surj_def by auto': 5070318: Failed to apply initial proof method (line 1):\nusing this:\n\\<forall>y. \\<exists>x. y = f x\ngoal (1 subgoal):\n 1. \\<And>y. \\<exists>x. f x = y",
+    "Error at '  have \"f \\<circ> (\\<lambda>y. SOME x. f x = y) = id\"\n  proo...': 5070326: Failed to apply initial proof method (line 2):\nusing this:\n\\<forall>y. \\<exists>x. y = f x\ngoal (1 subgoal):\n 1. \\<And>y. \\<exists>x. f x = y",
+    "Error at '    fix y': 5070328: Illegal application of proof command in \"prove\" mode",
+    "Error at '    show \"(f \\<circ> (\\<lambda>y. SOME x. f x = y)) y = id y...': 5070334: Illegal application of proof command in \"prove\" mode",
+    "Error at '      using someI_ex[OF witness[of y]] by simp': 5070350: Failed to apply initial proof method (line 1):\nusing this:\n\\<forall>y. \\<exists>x. y = f x\ngoal (1 subgoal):\n 1. \\<And>y. \\<exists>x. f x = y",
+    "Error at '  qed\n  then show \"\\<exists>g. f \\<circ> g = id\"\n    by blas...': 5070360: Failed to apply initial proof method (line 3):\nusing this:\n\\<forall>y. \\<exists>x. y = f x\ngoal (1 subgoal):\n 1. \\<And>y. \\<exists>x. f x = y",
+    "Error at 'next': 5070362: Illegal application of proof command in \"prove\" mode",
+    "Error at '  assume \"\\<exists>g. f \\<circ> g = id\"\n  then obtain g wher...': 5070372: Failed to apply initial proof method (line 3):\nusing this:\n\\<forall>y. \\<exists>x. y = f x\ngoal (1 subgoal):\n 1. \\<And>y. \\<exists>x. f x = y",
+    "Error at '  show \"surj f\"\n  proof (rule surjI)': 5070376: Failed to apply initial proof method (line 2):\nusing this:\n\\<forall>y. \\<exists>x. y = f x\ngoal (1 subgoal):\n 1. \\<And>y. \\<exists>x. f x = y",
+    "Error at '    fix y': 5070378: Illegal application of proof command in \"prove\" mode",
+    "Error at '    from fg have \"f (g y) = y\"\n      by (simp add: fun_eq_if...': 5070402: Failed to apply initial proof method:\nusing this:\n\\<forall>y. \\<exists>x. y = f x\ngoal (1 subgoal):\n 1. \\<And>y. \\<exists>x. f x = y",
+    "Error at '  qed': 5070404: Illegal application of proof command in \"prove\" mode",
+    "Error at 'qed': 5070406: Illegal application of proof command in \"prove\" mode"
+  ],
+  "raw_response": "Looking at this problem, I need to formalize that `surj f \u27f7 (\u2203g. f \u2218 g = id)`. The forward direction uses the axiom of choice (via Isabelle's `SOME` operator), and the backward direction is straightforward.\n\n```isabelle\ntheory SurjectiveRightInverse\n  imports Main\nbegin\n\ntheorem surj_iff_has_right_inverse:\n  \"surj f \\<longleftrightarrow> (\\<exists>g. f \\<circ> g = id)\"\nproof\n  assume \"surj f\"\n  then have witness: \"\\<And>y. \\<exists>x. f x = y\"\n    unfolding surj_def by auto\n  have \"f \\<circ> (\\<lambda>y. SOME x. f x = y) = id\"\n  proof (rule ext)\n    fix y\n    show \"(f \\<circ> (\\<lambda>y. SOME x. f x = y)) y = id y\"\n      using someI_ex[OF witness[of y]] by simp\n  qed\n  then show \"\\<exists>g. f \\<circ> g = id\"\n    by blast\nnext\n  assume \"\\<exists>g. f \\<circ> g = id\"\n  then obtain g where fg: \"f \\<circ> g = id\"\n    by blast\n  show \"surj f\"\n  proof (rule surjI)\n    fix y\n    from fg have \"f (g y) = y\"\n      by (simp add: fun_eq_iff)\n    then show \"f (g y) = y\" .\n  qed\nqed\n\nend\n```",
+  "thinking_budget": 4096
+}

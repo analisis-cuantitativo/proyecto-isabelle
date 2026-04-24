@@ -1,0 +1,16 @@
+{
+  "hash": "19edc1972284",
+  "model": "anthropic/claude-sonnet-4-5-20250929",
+  "timestamp": "2026-04-17T20:57:05.355069+00:00",
+  "exercise_path": "surjective.md",
+  "exercise": "Show that a function is surjective if and only if it has a right inverse.",
+  "verified": false,
+  "errors": [
+    "Error at '    unfolding surj_def .': 5070248: Failed to apply initial proof method:\nusing this:\n\\<forall>y. \\<exists>x. y = f x\ngoal (1 subgoal):\n 1. \\<forall>y. \\<exists>x. f x = y",
+    "Error at '    using someI_ex by auto': 5070388: Failed to finish proof (line 1):\ngoal (1 subgoal):\n 1. \\<And>y. \\<lbrakk>\\<forall>y. \\<exists>x. y = f x; \\<And>P. \\<exists>x. P x \\<Longrightarrow> P (SOME x. P x)\\<rbrakk> \\<Longrightarrow> \\<exists>x. f x = y",
+    "Error at 'next': 5070408: Illegal application of proof command in \"prove\" mode",
+    "Error at 'qed': 5070486: Illegal application of proof command in \"prove\" mode"
+  ],
+  "raw_response": "```isabelle\ntheory Surjective_RightInverse\n  imports Main\nbegin\n\ntheorem surjective_iff_right_inverse:\n  \"surj f \\<longleftrightarrow> (\\<exists>g. \\<forall>y. f (g y) = y)\"\nproof\n  (* Direction 1: If f is surjective, then f has a right inverse *)\n  assume \"surj f\"\n  hence \"\\<forall>y. \\<exists>x. f x = y\" \n    unfolding surj_def .\n  (* Use Hilbert's choice operator to construct the right inverse *)\n  hence \"\\<forall>y. f (SOME x. f x = y) = y\" \n    using someI_ex by auto\n  thus \"\\<exists>g. \\<forall>y. f (g y) = y\" \n    by blast\nnext\n  (* Direction 2: If f has a right inverse, then f is surjective *)\n  assume \"\\<exists>g. \\<forall>y. f (g y) = y\"\n  then obtain g where \"\\<forall>y. f (g y) = y\" \n    by blast\n  (* For any y, g(y) is a preimage under f *)\n  thus \"surj f\" \n    unfolding surj_def by blast\nqed\n\nend\n```",
+  "thinking_budget": 4096
+}
