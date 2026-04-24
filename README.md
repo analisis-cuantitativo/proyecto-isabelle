@@ -33,3 +33,10 @@ en el `.env` file. Eso lo pueden hacer con:
 ```bash
 set -a && source .env && set +a
 ```
+
+El `.env` file debería lucir así:
+```bash
+ANTHROPIC_API_KEY=...
+OPENAI_API_KEY=...
+GCP_BUCKET_NAME=proofs-dataset
+```
