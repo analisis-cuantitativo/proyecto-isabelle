@@ -1,0 +1,11 @@
+{
+  "hash": "da747695f187",
+  "model": "anthropic/claude-opus-4-6",
+  "timestamp": "2026-04-17T21:08:51.814774+00:00",
+  "exercise_path": "surjective.md",
+  "exercise": "Show that a function is surjective if and only if it has a right inverse.",
+  "verified": true,
+  "errors": [],
+  "raw_response": "Looking at this problem, I need to formalize that `surj f \u27f7 (\u2203g. \u2200y. f (g y) = y)`.\n\nThe forward direction uses the Hilbert choice operator (`SOME`) to construct the right inverse from surjectivity. The backward direction is straightforward: if `f \u2218 g = id`, then every element is in the range of `f`.\n\n```isabelle\ntheory SurjectiveRightInverse\n  imports Main\nbegin\n\ntheorem surj_iff_has_right_inverse:\n  \"surj f \\<longleftrightarrow> (\\<exists>g. \\<forall>y. f (g y) = y)\"\nproof\n  assume S: \"surj f\"\n  define g where \"g = (\\<lambda>y. SOME x. f x = y)\"\n  have \"\\<forall>y. f (g y) = y\"\n  proof\n    fix y\n    from S have \"\\<exists>x. y = f x\" by (auto simp: surj_def)\n    hence \"\\<exists>x. f x = y\" by auto\n    thus \"f (g y) = y\" unfolding g_def by (rule someI_ex)\n  qed\n  thus \"\\<exists>g. \\<forall>y. f (g y) = y\" by blast\nnext\n  assume \"\\<exists>g. \\<forall>y. f (g y) = y\"\n  then obtain g where \"\\<forall>y. f (g y) = y\" by blast\n  thus \"surj f\" by (auto simp: surj_def) (metis)\nqed\n\nend\n```",
+  "thinking_budget": 4096
+}
