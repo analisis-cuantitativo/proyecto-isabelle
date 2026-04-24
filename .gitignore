@@ -22,3 +22,6 @@ uv.lock
 
 # vscode stuff
 .vscode
+
+# Data directories (synced via GCP bucket)
+data/
