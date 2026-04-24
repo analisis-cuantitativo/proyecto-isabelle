@@ -1,1 +1,0 @@
-Let $X$ be a compact Hausdorff space. Let $\mathcal{A}$ be a collection of closed connected subsets of $X$ that is simply ordered by proper inclusion. Then $Y=\bigcap_{A \in \mathcal{A}} A$ is connected.
