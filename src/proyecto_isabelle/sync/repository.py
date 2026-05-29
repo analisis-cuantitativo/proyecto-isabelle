@@ -103,15 +103,14 @@ class SupabaseRepository:
         return response.data[0]
 
     def read_topic(self, topic: str) -> list:
-        # Esqueleto funcional
-        pass
+        raise NotImplementedError()
 
     def write(self, exercise: Exercise) -> None:
         """It uploads the exercise to the database, assembling all its relationships."""
         # 1. Resolve or create the source and obtain its foreign ID
         source_id = self._get_or_create_source(exercise.source)
 
-        # 2. Prepare and insert the Main Exercise      # 2.
+        # 2. Prepare and insert the Main Exercise
         db_payload = {
             "name": exercise.name,
             "source_id": source_id,

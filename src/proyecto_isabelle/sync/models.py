@@ -1,10 +1,9 @@
 from pydantic import BaseModel
-from typing import List, Optional
 
 
 class Source(BaseModel):
     title: str
-    authors: List[str]
+    authors: list[str]
     section: str
     publication_year: int
     source_page: str
@@ -15,12 +14,12 @@ class Exercise(BaseModel):
 
     name: str
     source: Source
-    topics: List[str]
-    requirements: List[str]
+    topics: list[str]
+    requirements: list[str]
     is_verified: bool
-    msc_code: Optional[str] = None
-    license: Optional[str] = None
-    proposed_thy_code: Optional[str] = None
-    corrected_thy_code: Optional[str] = None
-    statement: Optional[str] = None
-    proof_tex: Optional[str] = None
+    msc_code: str | None = None
+    license: str | None = None
+    proposed_thy_code: str | None = None
+    corrected_thy_code: str | None = None
+    statement: str | None = None
+    proof_tex: str | None = None
