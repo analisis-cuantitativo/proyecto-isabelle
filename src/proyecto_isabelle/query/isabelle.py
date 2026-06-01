@@ -47,8 +47,19 @@ class IsabelleResponse(BaseModel):
 
 def _verify_server_is_running(api_url: str = "http://localhost:8000") -> None:
     with httpx.Client(timeout=DEFAULT_TIMEOUT) as client:
-        resp = client.get(f"{api_url.rstrip('/')}/health")
-        resp.raise_for_status()
+        try:
+            resp = client.get(f"{api_url.rstrip('/')}/health")
+        except (ConnectionError, httpx.ConnectError) as e:
+            raise RuntimeError(
+                "Couldn't connect to the DeepIsaHOL server. Did you remember "
+                "to run `docker compose up` or to start the DeepIsaHOL server?"
+            ) from e
+
+        if resp.status_code != 200:
+            raise RuntimeError(
+                "DeepIsaHOL server is not healthy. Did you remember to run "
+                "`docker compose up` or to start the DeepIsaHOL server?"
+            )
 
 
 def query_file(
