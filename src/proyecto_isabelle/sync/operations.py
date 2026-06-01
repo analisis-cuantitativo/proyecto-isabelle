@@ -1,5 +1,9 @@
 """Upload and download operations for GCS sync with MD5-based incremental sync."""
 
+import json
+from pathlib import Path
+import re
+
 from dataclasses import dataclass
 
 from rich.console import Console
@@ -7,6 +11,10 @@ from rich.console import Console
 from proyecto_isabelle.sync.client import GCSClient
 from proyecto_isabelle.sync.hash import compute_md5
 from proyecto_isabelle.util.constants import ROOT_DIR
+
+# Imports for integration with the database
+from proyecto_isabelle.sync.repository import SupabaseRepository
+from proyecto_isabelle.sync.models import Exercise
 
 # Directories to sync
 SYNC_DIRS = ["exercises", "exercises_with_proof", "proofs"]
@@ -167,3 +175,69 @@ def download_from_gcs(
                     result.errors.append(error_msg)
 
     return result
+
+
+def parse_markdown_exercise(md_content: str) -> tuple[str, str]:
+    statement_match = re.search(
+        r"## Statement\n(.*?)(?=## Proof)", md_content, re.DOTALL
+    )
+    statement = statement_match.group(1).strip() if statement_match else ""
+
+    proof_match = re.search(
+        r"\\begin\{proof\}(.*?)\\end\{proof\}", md_content, re.DOTALL
+    )
+    proof_tex = proof_match.group(1).strip() if proof_match else ""
+
+    return statement, proof_tex
+
+
+def upload_exercise_to_db(
+    path: Path,
+    dry_run: bool = False,
+    verbose: bool = False,
+    console: Console | None = None,
+) -> bool:
+    if console is None:
+        console = Console()
+
+    json_files = list(path.glob("*.json"))
+    md_files = list(path.glob("*.md"))
+    thy_files = list(path.glob("*.thy"))
+
+    if not json_files or not thy_files or not md_files:
+        console.print(f"[red]Faltan archivos (.json, .md, .thy) en {path}[/red]")
+        return False
+
+    try:
+        with open(json_files[0], "r", encoding="utf-8") as f:
+            raw_data = json.load(f)
+        with open(thy_files[0], "r", encoding="utf-8") as f:
+            raw_data["proposed_thy_code"] = f.read()
+        with open(md_files[0], "r", encoding="utf-8") as f:
+            statement, proof_tex = parse_markdown_exercise(f.read())
+            raw_data["statement"] = statement
+            raw_data["proof_tex"] = proof_tex
+
+        # 1. Pydantic validates that the data is perfect
+        exercise = Exercise(**raw_data)
+
+    except Exception as e:
+        console.print(f"[red]Error de Pydantic o lectura en {path}: {e}[/red]")
+        return False
+
+    if dry_run:
+        console.print(f"[cyan]Would upload: '{exercise.name}'[/cyan]")
+        return True
+
+    try:
+        # 2. The repository uploads the data
+        repo = SupabaseRepository()
+        repo.write(exercise)
+        if verbose:
+            console.print(
+                f"[green]Successfully uploaded '{exercise.name}' a Supabase.[/green]"
+            )
+        return True
+    except Exception as e:
+        console.print(f"[red]Error en BD: {e}[/red]")
+        return False
