@@ -26,3 +26,5 @@ uv.lock
 # Data directories (synced via GCP bucket)
 data/
 old_data/
+
+.idea/
