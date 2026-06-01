@@ -2,7 +2,6 @@
 
 import json
 from pathlib import Path
-import re
 
 from dataclasses import dataclass
 
@@ -178,55 +177,60 @@ def download_from_gcs(
 
 
 def parse_markdown_exercise(md_content: str) -> tuple[str, str]:
-    statement_match = re.search(
-        r"## Statement\n(.*?)(?=## Proof)", md_content, re.DOTALL
-    )
-    statement = statement_match.group(1).strip() if statement_match else ""
+    """Extracts statement and proof by splitting at the proof environment."""
+    parts = md_content.split(r"\begin{proof}")
 
-    proof_match = re.search(
-        r"\\begin\{proof\}(.*?)\\end\{proof\}", md_content, re.DOTALL
-    )
-    proof_tex = proof_match.group(1).strip() if proof_match else ""
+    statement = parts[0].strip()
+    proof_tex = ""
+
+    if len(parts) > 1:
+        proof_content = parts[1]
+        end_idx = proof_content.find(r"\end{proof}")
+
+        if end_idx != -1:
+            proof_tex = proof_content[:end_idx].strip()
+        else:
+            proof_tex = proof_content.strip()
 
     return statement, proof_tex
 
 
-def upload_exercise_to_db(
-    path: Path,
-    dry_run: bool = False,
-    verbose: bool = False,
-    console: Console | None = None,
-) -> bool:
-    if console is None:
-        console = Console()
-
+def load_exercise_from_path(path: Path) -> Exercise:
+    """Reads the local files from a directory and returns a validated Exercise object."""
     json_files = list(path.glob("*.json"))
     md_files = list(path.glob("*.md"))
     thy_files = list(path.glob("*.thy"))
 
     if not json_files or not thy_files or not md_files:
-        console.print(f"[red]Faltan archivos (.json, .md, .thy) en {path}[/red]")
-        return False
+        raise FileNotFoundError(f"Faltan archivos (.json, .md, .thy) en {path}")
 
-    try:
-        with open(json_files[0], "r", encoding="utf-8") as f:
-            raw_data = json.load(f)
-        with open(thy_files[0], "r", encoding="utf-8") as f:
-            raw_data["proposed_thy_code"] = f.read()
-        with open(md_files[0], "r", encoding="utf-8") as f:
-            statement, proof_tex = parse_markdown_exercise(f.read())
-            raw_data["statement"] = statement
-            raw_data["proof_tex"] = proof_tex
+    with open(json_files[0], "r", encoding="utf-8") as f:
+        raw_data = json.load(f)
 
-        # 1. Pydantic validates that the data is perfect
-        exercise = Exercise(**raw_data)
+    with open(thy_files[0], "r", encoding="utf-8") as f:
+        raw_data["proposed_thy_code"] = f.read()
 
-    except Exception as e:
-        console.print(f"[red]Error de Pydantic o lectura en {path}: {e}[/red]")
-        return False
+    with open(md_files[0], "r", encoding="utf-8") as f:
+        statement, proof_tex = parse_markdown_exercise(f.read())
+        raw_data["statement"] = statement
+        raw_data["proof_tex"] = proof_tex
+
+    # Pydantic validates that the data is perfect
+    return Exercise(**raw_data)
+
+
+def upload_exercise_to_db(
+    exercise: Exercise,
+    dry_run: bool = False,
+    verbose: bool = False,
+    console: Console | None = None,
+) -> bool:
+    """Uploads a validated Exercise object to the Supabase database."""
+    if console is None:
+        console = Console()
 
     if dry_run:
-        console.print(f"[cyan]Would upload: '{exercise.name}'[/cyan]")
+        console.print(f"[cyan]Would upload: '{exercise.name}' to Supabase[/cyan]")
         return True
 
     try:
@@ -235,9 +239,9 @@ def upload_exercise_to_db(
         repo.write(exercise)
         if verbose:
             console.print(
-                f"[green]Successfully uploaded '{exercise.name}' a Supabase.[/green]"
+                f"[green]Successfully uploaded '{exercise.name}' to Supabase.[/green]"
             )
         return True
     except Exception as e:
-        console.print(f"[red]Error en BD: {e}[/red]")
+        console.print(f"[red]Error en BD para '{exercise.name}': {e}[/red]")
         return False

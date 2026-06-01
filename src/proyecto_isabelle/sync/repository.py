@@ -120,7 +120,7 @@ class SupabaseRepository:
             "is_verified": exercise.is_verified,
             "corrected_thy_code": exercise.corrected_thy_code,
             "statement": exercise.statement,
-            "proof": exercise.proof,
+            "proof_tex": exercise.proof_tex,
         }
 
         ex_resp = self.client.table("exercise").insert(db_payload).execute()
