@@ -201,19 +201,30 @@ def load_exercise_from_path(path: Path) -> Exercise:
     md_files = list(path.glob("*.md"))
     thy_files = list(path.glob("*.thy"))
 
-    if not json_files or not thy_files or not md_files:
-        raise FileNotFoundError(f"Faltan archivos (.json, .md, .thy) en {path}")
+    # We keep the previous logic of the mandatory .md and .json files.
+    if not json_files or not md_files:
+        raise FileNotFoundError(f"Required files (.json, .md) are missing in {path}")
 
-    with open(json_files[0], "r", encoding="utf-8") as f:
+    with open(json_files[0], "r") as f:
         raw_data = json.load(f)
 
-    with open(thy_files[0], "r", encoding="utf-8") as f:
-        raw_data["proposed_thy_code"] = f.read()
-
-    with open(md_files[0], "r", encoding="utf-8") as f:
+    with open(md_files[0], "r") as f:
         statement, proof_tex = parse_markdown_exercise(f.read())
         raw_data["statement"] = statement
         raw_data["proof_tex"] = proof_tex
+
+    # solution to issue 35
+    if thy_files:
+        with open(thy_files[0], "r") as f:
+            raw_data["proposed_thy_code"] = f.read()
+    else:
+        raw_data["proposed_thy_code"] = None
+
+        console = Console()
+        console.print(
+            f"[yellow]Warning: No .thy file found in '{path.name}'"
+            f"Uploading 'proposed_thy_code' as null[/yellow]"
+        )
 
     # Pydantic validates that the data is perfect
     return Exercise(**raw_data)
@@ -225,7 +236,7 @@ def upload_exercise_to_db(
     verbose: bool = False,
     console: Console | None = None,
 ) -> bool:
-    """Uploads a validated Exercise object to the Supabase database."""
+    """Uploads a validated Exercise object to the Supabase database"""
     if console is None:
         console = Console()
 
