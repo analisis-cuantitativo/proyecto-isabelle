@@ -55,7 +55,7 @@ def _verify_server_is_running(api_url: str = "http://localhost:8000") -> None:
                 "to run `docker compose up` or to start the DeepIsaHOL server?"
             ) from e
 
-        if resp.status_code != 200:
+        if not (200 <= resp.status_code < 300):
             raise RuntimeError(
                 "DeepIsaHOL server is not healthy. Did you remember to run "
                 "`docker compose up` or to start the DeepIsaHOL server?"
