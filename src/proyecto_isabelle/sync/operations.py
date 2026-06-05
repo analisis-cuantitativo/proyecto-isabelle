@@ -181,18 +181,18 @@ def parse_markdown_exercise(md_content: str) -> tuple[str, str]:
     parts = md_content.split(r"\begin{proof}")
 
     statement = parts[0].strip()
-    proof_tex = ""
+    proof = ""
 
     if len(parts) > 1:
         proof_content = parts[1]
         end_idx = proof_content.find(r"\end{proof}")
 
         if end_idx != -1:
-            proof_tex = proof_content[:end_idx].strip()
+            proof = proof_content[:end_idx].strip()
         else:
-            proof_tex = proof_content.strip()
+            proof = proof_content.strip()
 
-    return statement, proof_tex
+    return statement, proof
 
 
 def load_exercise_from_path(path: Path) -> Exercise:
@@ -209,9 +209,9 @@ def load_exercise_from_path(path: Path) -> Exercise:
         raw_data = json.load(f)
 
     with open(md_files[0], "r") as f:
-        statement, proof_tex = parse_markdown_exercise(f.read())
+        statement, proof = parse_markdown_exercise(f.read())
         raw_data["statement"] = statement
-        raw_data["proof_tex"] = proof_tex
+        raw_data["proof"] = proof
 
     # solution to issue 35
     if thy_files:
