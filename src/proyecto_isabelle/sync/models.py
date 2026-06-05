@@ -15,11 +15,11 @@ class Exercise(BaseModel):
     name: str
     source: Source
     topics: list[str]
-    requirements: list[str]
+    requirements: list[str] | None
     is_verified: bool
     msc_code: str | None = None
     license: str | None = None
     proposed_thy_code: str | None = None
     corrected_thy_code: str | None = None
     statement: str | None = None
-    proof_tex: str | None = None
+    proof: str | None = None

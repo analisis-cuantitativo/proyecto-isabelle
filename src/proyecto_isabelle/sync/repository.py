@@ -11,13 +11,27 @@ class SupabaseRepository:
     def __init__(self):
         supabase_url: str = os.environ.get("SUPABASE_URL", "")
         supabase_key: str = os.environ.get("SUPABASE_KEY", "")
+        supabase_email: str = os.environ.get("SUPABASE_EMAIL", "")
+        supabase_password: str = os.environ.get("SUPABASE_PASSWORD", "")
 
-        if not supabase_url or not supabase_key:
+        if (
+            not supabase_url
+            or not supabase_key
+            or not supabase_email
+            or not supabase_password
+        ):
             raise ValueError(
-                "Faltan las variables de entorno SUPABASE_URL y SUPABASE_KEY en el .env"
+                "Faltan las variables de entorno SUPABASE_URL, SUPABASE_KEY,"
+                " SUPABASE_EMAIL y SUPABASE_PASSWORD en el .env"
             )
 
         self.client: Client = create_client(supabase_url, supabase_key)
+        self.client.auth.sign_in_with_password(
+            {
+                "email": supabase_email,
+                "password": supabase_password,
+            }
+        )
 
     # ASSISTANT FUNCTIONS FOR MANAGING RELATIONSHIPS (FOREIGN KEYS)
 
@@ -120,7 +134,7 @@ class SupabaseRepository:
             "is_verified": exercise.is_verified,
             "corrected_thy_code": exercise.corrected_thy_code,
             "statement": exercise.statement,
-            "proof_tex": exercise.proof_tex,
+            "proof": exercise.proof,
         }
 
         ex_resp = self.client.table("exercise").insert(db_payload).execute()
@@ -134,7 +148,7 @@ class SupabaseRepository:
             ).execute()
 
         # 4. Connect Requirements (Intermediate Table: exercise_requirement)
-        for req_name in exercise.requirements:
+        for req_name in exercise.requirements or []:
             req_id = self._get_or_create_requirement(req_name)
             self.client.table("exercise_requirement").insert(
                 {"exercise_id": exercise_id, "requirement_id": req_id}
