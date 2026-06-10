@@ -10,14 +10,22 @@ from proyecto_isabelle.sync.operations import (
 def collect_exercises(path: Path, dry_run: bool = False):
     """Find all exercises on the path and use the  functions for load and upload all exercise at the database"""
     for topic in path.iterdir():
-        if topic.is_dir():
-            for exercise in topic.iterdir():
-                if exercise.is_dir():
-                    if dry_run:
-                        print(f"Subiría la carpeta {exercise}")
-                    else:
-                        exercise_object = load_exercise_from_path(exercise)
-                        upload_exercise_to_db(exercise_object)
+        if not topic.is_dir():
+            continue
+
+        for exercise in topic.iterdir():
+            if not exercise.is_dir():
+                continue
+
+            if dry_run:
+                print(f"Subiría la carpeta {exercise}")
+                continue
+
+            try:
+                exercise_object = load_exercise_from_path(exercise)
+                upload_exercise_to_db(exercise_object)
+            except Exception as e:
+                print(f"No pude subir {exercise} por {e}")
 
 
 old_exercises = ROOT_DIR / "old_data" / "exercises_with_proof"
