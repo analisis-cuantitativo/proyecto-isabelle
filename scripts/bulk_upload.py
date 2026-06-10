@@ -9,6 +9,9 @@ from proyecto_isabelle.sync.operations import (
 
 def collect_exercises(path: Path, dry_run: bool = False):
     """Find all exercises on the path and use the  functions for load and upload all exercise at the database"""
+
+    fails = []
+
     for topic in path.iterdir():
         if not topic.is_dir():
             continue
@@ -26,6 +29,9 @@ def collect_exercises(path: Path, dry_run: bool = False):
                 upload_exercise_to_db(exercise_object)
             except Exception as e:
                 print(f"No pude subir {exercise} por {e}")
+                fails.append(exercise)
+
+    print(f"Fallaron: {fails}")
 
 
 old_exercises = ROOT_DIR / "old_data" / "exercises_with_proof"
