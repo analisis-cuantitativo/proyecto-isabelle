@@ -205,10 +205,10 @@ def load_exercise_from_path(path: Path) -> Exercise:
     if not json_files or not md_files:
         raise FileNotFoundError(f"Required files (.json, .md) are missing in {path}")
 
-    with open(json_files[0], "r") as f:
+    with open(json_files[0], "r", encoding="utf-8") as f:
         raw_data = json.load(f)
 
-    with open(md_files[0], "r") as f:
+    with open(md_files[0], "r", encoding="utf-8") as f:
         statement, proof = parse_markdown_exercise(f.read())
         raw_data["statement"] = statement
         raw_data["proof"] = proof
