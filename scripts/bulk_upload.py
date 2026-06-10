@@ -20,5 +20,5 @@ def collect_exercises(path: Path, dry_run: bool = False):
                         upload_exercise_to_db(exercise_object)
 
 
-old_exercises = ROOT_DIR / "old_data"
-collect_exercises(old_exercises, dry_run=True)
+old_exercises = ROOT_DIR / "old_data" / "exercises_with_proof"
+collect_exercises(old_exercises)
