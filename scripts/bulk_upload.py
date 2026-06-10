@@ -7,15 +7,18 @@ from proyecto_isabelle.sync.operations import (
 )
 
 
-def collect_exercises(path: Path):
+def collect_exercises(path: Path, dry_run: bool = False):
     """Find all exercises on the path and use the  functions for load and upload all exercise at the database"""
     for topic in path.iterdir():
         if topic.is_dir():
             for exercise in topic.iterdir():
                 if exercise.is_dir():
-                    exercise_object = load_exercise_from_path(exercise)
-                    upload_exercise_to_db(exercise_object)
+                    if dry_run:
+                        print(f"Subiría la carpeta {exercise}")
+                    else:
+                        exercise_object = load_exercise_from_path(exercise)
+                        upload_exercise_to_db(exercise_object)
 
 
 old_exercises = ROOT_DIR / "old_data"
-collect_exercises(old_exercises)
+collect_exercises(old_exercises, dry_run=True)
