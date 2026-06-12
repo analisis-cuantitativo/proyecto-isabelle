@@ -26,10 +26,12 @@ def collect_exercises(path: Path, dry_run: bool = False):
 
             try:
                 exercise_object = load_exercise_from_path(exercise)
-                upload_exercise_to_db(exercise_object)
             except Exception as e:
                 print(f"No pude subir {exercise} por {e}")
                 fails.append(exercise)
+                continue
+
+            upload_exercise_to_db(exercise_object)
 
     print(f"Fallaron: {fails}")
 
