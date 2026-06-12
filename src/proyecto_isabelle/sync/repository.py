@@ -126,10 +126,9 @@ class SupabaseRepository:
         # Check if exercise exists within this specific source
         resp = (
             self.client.table("exercise")
-            .select("*")
+            .select("id")
             .eq("name", exercise.name)
-            .eq("statement", exercise.statement)
-            .eq("proof", exercise.proof)
+            .eq("source_id", source_id)
             .execute()
         )
 
