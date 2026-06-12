@@ -38,6 +38,9 @@ class Benchmark(BaseModel):
     model_name: str
     """The model's name."""
 
+    was_given_the_correct_thy_statement: bool
+    """Whether the model was given the human-verified .thy statement"""
+
     thy_results: list[str]
     """
     The proposals by the model, which is a list whose elements
