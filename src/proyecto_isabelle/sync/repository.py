@@ -33,10 +33,8 @@ class SupabaseRepository:
             }
         )
 
-    # ASSISTANT FUNCTIONS FOR MANAGING RELATIONSHIPS (FOREIGN KEYS)
-
     def _get_or_create_author(self, author_name: str) -> int:
-        """Searches for an author; creates one if it doesn't exist and returns its ID."""
+        """Search for author by name."""
         resp = (
             self.client.table("author").select("id").eq("name", author_name).execute()
         )
@@ -49,10 +47,7 @@ class SupabaseRepository:
         return insert_resp.data[0]["id"]
 
     def _get_or_create_source(self, source_data: Source) -> int:
-        """
-        Searches for a source using all descriptive fields to ensure
-        uniqueness across different book sections or pages.
-        """
+        """Search for source by ALL descriptive fields to ensure precision."""
         resp = (
             self.client.table("source")
             .select("id")
@@ -66,7 +61,6 @@ class SupabaseRepository:
         if resp.data:
             return resp.data[0]["id"]
 
-        # Create source if it doesn't exist
         new_source = {
             "title": source_data.title,
             "section": source_data.section,
@@ -76,7 +70,7 @@ class SupabaseRepository:
         insert_resp = self.client.table("source").insert(new_source).execute()
         source_id = insert_resp.data[0]["id"]
 
-        # Link authors to the new source
+        # Link authors
         for author_name in source_data.authors:
             author_id = self._get_or_create_author(author_name)
             self.client.table("source_author").insert(
@@ -86,7 +80,7 @@ class SupabaseRepository:
         return source_id
 
     def _get_or_create_topic(self, topic_name: str) -> int:
-        """Searches for a topic; creates one if missing and returns its ID."""
+        """Search for topic by name."""
         resp = self.client.table("topic").select("id").eq("name", topic_name).execute()
         if resp.data:
             return resp.data[0]["id"]
@@ -95,7 +89,7 @@ class SupabaseRepository:
         return insert_resp.data[0]["id"]
 
     def _get_or_create_requirement(self, req_name: str) -> int:
-        """Searches for a requirement; creates one if missing and returns its ID."""
+        """Search for requirement by name."""
         resp = (
             self.client.table("requirement").select("id").eq("name", req_name).execute()
         )
@@ -107,9 +101,8 @@ class SupabaseRepository:
         )
         return insert_resp.data[0]["id"]
 
-    # MAIN METHODS
     def read(self, exercise_name: str) -> dict:
-        """Reads an exercise by its name."""
+        """Reads an exercise by name."""
         response = (
             self.client.table("exercise")
             .select("*")
@@ -122,16 +115,15 @@ class SupabaseRepository:
 
     def write(self, exercise: Exercise) -> None:
         """
-        Intelligent Upsert:
-        1. Identifies unique source.
-        2. Searches exercise by 'name' + 'source_id' (Composite Identity).
-        3. Updates existing record or creates a new one.
-        4. Cleans and refreshes relationships (topics/requirements).
+        1. Resolve unique source (using exhaustive field matching).
+        2. Identify exercise by composite key: Name + SourceID.
+        3. Perform Upsert (Update or Insert).
+        4. Synchronize M:N relationships (Topics and Requirements).
         """
-        # 1. Resolve source ID based on exhaustive descriptive fields
+        # Resolve source using exhaustive validation
         source_id = self._get_or_create_source(exercise.source)
 
-        # 2. Check for existence using composite identity
+        # Check if exercise exists within this specific source
         resp = (
             self.client.table("exercise")
             .select("id")
@@ -152,7 +144,7 @@ class SupabaseRepository:
             "proof": exercise.proof,
         }
 
-        # 3. Perform update or insert
+        # Update or Insert
         if resp.data:
             exercise_id = resp.data[0]["id"]
             self.client.table("exercise").update(db_payload).eq(
@@ -162,8 +154,7 @@ class SupabaseRepository:
             ex_resp = self.client.table("exercise").insert(db_payload).execute()
             exercise_id = ex_resp.data[0]["id"]
 
-        # 4. Refresh N:M relationships (Topics and Requirements)
-        # Remove existing links before inserting current state
+        # Clear old links, add new ones
         self.client.table("exercise_topic").delete().eq(
             "exercise_id", exercise_id
         ).execute()
@@ -171,14 +162,12 @@ class SupabaseRepository:
             "exercise_id", exercise_id
         ).execute()
 
-        # Re-link current topics
         for topic_name in exercise.topics:
             topic_id = self._get_or_create_topic(topic_name)
             self.client.table("exercise_topic").insert(
                 {"exercise_id": exercise_id, "topic_id": topic_id}
             ).execute()
 
-        # Re-link current requirements
         for req_name in exercise.requirements or []:
             req_id = self._get_or_create_requirement(req_name)
             self.client.table("exercise_requirement").insert(
