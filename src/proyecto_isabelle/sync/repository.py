@@ -21,8 +21,8 @@ class SupabaseRepository:
             or not supabase_password
         ):
             raise ValueError(
-                "Faltan las variables de entorno SUPABASE_URL, SUPABASE_KEY,"
-                " SUPABASE_EMAIL y SUPABASE_PASSWORD en el .env"
+                "Missing environment variables: SUPABASE_URL, SUPABASE_KEY,"
+                " SUPABASE_EMAIL, and SUPABASE_PASSWORD in .env"
             )
 
         self.client: Client = create_client(supabase_url, supabase_key)
@@ -36,7 +36,7 @@ class SupabaseRepository:
     # ASSISTANT FUNCTIONS FOR MANAGING RELATIONSHIPS (FOREIGN KEYS)
 
     def _get_or_create_author(self, author_name: str) -> int:
-        """It searches for an author. If it doesn't exist, it creates it and returns its ID."""
+        """Searches for an author; creates one if it doesn't exist and returns its ID."""
         resp = (
             self.client.table("author").select("id").eq("name", author_name).execute()
         )
@@ -49,12 +49,15 @@ class SupabaseRepository:
         return insert_resp.data[0]["id"]
 
     def _get_or_create_source(self, source_data: Source) -> int:
-        """It searches for a source. If it doesn't exist, it creates it along with its authors and returns its ID."""
-        # We search by title (assuming it is unique)
+        """
+        Searches for a source using all descriptive fields to ensure
+        uniqueness across different book sections or pages.
+        """
         resp = (
             self.client.table("source")
             .select("id")
             .eq("title", source_data.title)
+            .eq("section", source_data.section)
             .eq("publication_year", source_data.publication_year)
             .eq("source_page", source_data.source_page)
             .execute()
@@ -63,7 +66,7 @@ class SupabaseRepository:
         if resp.data:
             return resp.data[0]["id"]
 
-        # if not exists, we create the source
+        # Create source if it doesn't exist
         new_source = {
             "title": source_data.title,
             "section": source_data.section,
@@ -73,10 +76,9 @@ class SupabaseRepository:
         insert_resp = self.client.table("source").insert(new_source).execute()
         source_id = insert_resp.data[0]["id"]
 
-        # Connect the authors with this new source
+        # Link authors to the new source
         for author_name in source_data.authors:
             author_id = self._get_or_create_author(author_name)
-            # Insertar en tabla intermedia source_author
             self.client.table("source_author").insert(
                 {"source_id": source_id, "author_id": author_id}
             ).execute()
@@ -84,7 +86,7 @@ class SupabaseRepository:
         return source_id
 
     def _get_or_create_topic(self, topic_name: str) -> int:
-        """It searches for a topic. If it doesn't exist, it creates it and returns its ID."""
+        """Searches for a topic; creates one if missing and returns its ID."""
         resp = self.client.table("topic").select("id").eq("name", topic_name).execute()
         if resp.data:
             return resp.data[0]["id"]
@@ -93,7 +95,7 @@ class SupabaseRepository:
         return insert_resp.data[0]["id"]
 
     def _get_or_create_requirement(self, req_name: str) -> int:
-        """It searches for a requirement. If it doesn't exist, it creates it and returns its ID"""
+        """Searches for a requirement; creates one if missing and returns its ID."""
         resp = (
             self.client.table("requirement").select("id").eq("name", req_name).execute()
         )
@@ -105,9 +107,9 @@ class SupabaseRepository:
         )
         return insert_resp.data[0]["id"]
 
-    # MAIN METHODS OF THE REPOSITORY
-
+    # MAIN METHODS
     def read(self, exercise_name: str) -> dict:
+        """Reads an exercise by its name."""
         response = (
             self.client.table("exercise")
             .select("*")
@@ -115,18 +117,29 @@ class SupabaseRepository:
             .execute()
         )
         if not response.data:
-            raise ValueError(f"Ejercicio no encontrado: {exercise_name}")
+            raise ValueError(f"Exercise not found: {exercise_name}")
         return response.data[0]
 
-    def read_topic(self, topic: str) -> list:
-        raise NotImplementedError()
-
     def write(self, exercise: Exercise) -> None:
-        """It uploads the exercise to the database, assembling all its relationships."""
-        # 1. Resolve or create the source and obtain its foreign ID
+        """
+        Intelligent Upsert:
+        1. Identifies unique source.
+        2. Searches exercise by 'name' + 'source_id' (Composite Identity).
+        3. Updates existing record or creates a new one.
+        4. Cleans and refreshes relationships (topics/requirements).
+        """
+        # 1. Resolve source ID based on exhaustive descriptive fields
         source_id = self._get_or_create_source(exercise.source)
 
-        # 2. Prepare and insert the Main Exercise
+        # 2. Check for existence using composite identity
+        resp = (
+            self.client.table("exercise")
+            .select("id")
+            .eq("name", exercise.name)
+            .eq("source_id", source_id)
+            .execute()
+        )
+
         db_payload = {
             "name": exercise.name,
             "source_id": source_id,
@@ -139,17 +152,33 @@ class SupabaseRepository:
             "proof": exercise.proof,
         }
 
-        ex_resp = self.client.table("exercise").insert(db_payload).execute()
-        exercise_id = ex_resp.data[0]["id"]  # We obtain the ID of the new exercise
+        # 3. Perform update or insert
+        if resp.data:
+            exercise_id = resp.data[0]["id"]
+            self.client.table("exercise").update(db_payload).eq(
+                "id", exercise_id
+            ).execute()
+        else:
+            ex_resp = self.client.table("exercise").insert(db_payload).execute()
+            exercise_id = ex_resp.data[0]["id"]
 
-        # 3. Connect Topics (Intermediate Table: exercise_topic)
+        # 4. Refresh N:M relationships (Topics and Requirements)
+        # Remove existing links before inserting current state
+        self.client.table("exercise_topic").delete().eq(
+            "exercise_id", exercise_id
+        ).execute()
+        self.client.table("exercise_requirement").delete().eq(
+            "exercise_id", exercise_id
+        ).execute()
+
+        # Re-link current topics
         for topic_name in exercise.topics:
             topic_id = self._get_or_create_topic(topic_name)
             self.client.table("exercise_topic").insert(
                 {"exercise_id": exercise_id, "topic_id": topic_id}
             ).execute()
 
-        # 4. Connect Requirements (Intermediate Table: exercise_requirement)
+        # Re-link current requirements
         for req_name in exercise.requirements or []:
             req_id = self._get_or_create_requirement(req_name)
             self.client.table("exercise_requirement").insert(
