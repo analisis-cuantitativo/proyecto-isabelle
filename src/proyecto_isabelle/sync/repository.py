@@ -2,7 +2,7 @@ import os
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-from proyecto_isabelle.sync.models import Exercise, Source
+from proyecto_isabelle.sync.models import Exercise, Source, Benchmark
 
 load_dotenv()
 
@@ -155,3 +155,6 @@ class SupabaseRepository:
             self.client.table("exercise_requirement").insert(
                 {"exercise_id": exercise_id, "requirement_id": req_id}
             ).execute()
+
+    def write_benchmark(self, benchmark: Benchmark) -> None:
+        self.client.table("benchmark").insert(**benchmark.model_dump(mode="python"))
