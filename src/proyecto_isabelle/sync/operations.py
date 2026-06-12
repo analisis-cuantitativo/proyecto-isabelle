@@ -244,15 +244,11 @@ def upload_exercise_to_db(
         console.print(f"[cyan]Would upload: '{exercise.name}' to Supabase[/cyan]")
         return True
 
-    try:
-        # 2. The repository uploads the data
-        repo = SupabaseRepository()
-        repo.write(exercise)
-        if verbose:
-            console.print(
-                f"[green]Successfully uploaded '{exercise.name}' to Supabase.[/green]"
-            )
-        return True
-    except Exception as e:
-        console.print(f"[red]Error en BD para '{exercise.name}': {e}[/red]")
-        return False
+    # 2. The repository uploads the data
+    repo = SupabaseRepository()
+    repo.write(exercise)
+    if verbose:
+        console.print(
+            f"[green]Successfully uploaded '{exercise.name}' to Supabase.[/green]"
+        )
+    return True
