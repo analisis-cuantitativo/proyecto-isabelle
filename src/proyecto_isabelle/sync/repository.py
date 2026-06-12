@@ -55,6 +55,8 @@ class SupabaseRepository:
             self.client.table("source")
             .select("id")
             .eq("title", source_data.title)
+            .eq("publication_year", source_data.publication_year)
+            .eq("source_page", source_data.source_page)
             .execute()
         )
 
