@@ -51,4 +51,7 @@ def get_exercise_by_name_route(exercise_name: str):
 
 @router.post("/{exercise_id}/review", response_model=ReviewResponse)
 def review_exercise(exercise_id: int, request: ReviewRequest):
+    exercise = get_exercise_by_id(exercise_id)
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Ejercicio no encontrado")
     return submit_review(exercise_id, request)
