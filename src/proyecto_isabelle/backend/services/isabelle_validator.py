@@ -8,19 +8,19 @@ def validate_isabelle_code(code: str) -> IsabelleValidationResult:
     warnings: list[str] = []
 
     if not code:
-        errors.append("No se proporciono codigo Isabelle.")
+        errors.append("No se proporcionó código Isabelle.")
 
     if code and "sorry" in code:
-        warnings.append("El codigo contiene 'sorry': la prueba esta incompleta.")
+        warnings.append("El código contiene 'sorry': la prueba está incompleta.")
 
     if code and "theory" not in code:
-        errors.append("No se encontro la declaracion 'theory'.")
+        errors.append("No se encontró la declaración 'theory'.")
 
     if code and "end" not in code:
-        warnings.append("Posible falta de cierre 'end' en la theory.")
+        warnings.append("Posible falta de cierre 'end' en la teoría.")
 
     if code and "lemma" not in code and "theorem" not in code:
-        warnings.append("No se encontro un lemma o teorema declarado.")
+        warnings.append("No se encontró un lemma o teorema declarado.")
 
     is_valid = len(errors) == 0
 
