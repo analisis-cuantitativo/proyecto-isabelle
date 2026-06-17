@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -28,3 +29,15 @@ def save_text(text: str, path: str | Path) -> None:
     # Se crea el archivo en la ruta correspondiente si no existe y se escribe en el"
     with open(path, "w", encoding="utf-8") as archivo:
         archivo.write(text)
+
+
+def extract_thy_content(response: str) -> str | None:
+    """Extract the .thy file content from an LLM response.
+
+    Looks for code blocks marked with ```isabelle or ``` and extracts the content.
+    """
+    pattern = r"```(?:isabelle|thy)?\s*\n(.*?)\n```"
+    match = re.search(pattern, response, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return None
