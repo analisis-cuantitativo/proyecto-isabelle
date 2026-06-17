@@ -45,3 +45,32 @@ SUPABASE_EMAIL=...
 SUPABASE_PASSWORD=...
 DIRECT_CONNECTION_STRING=...
 ```
+
+## Backend API
+
+Servidor FastAPI con los endpoints REST. Para correrlo:
+
+```bash
+uv sync
+uv run uvicorn proyecto_isabelle.backend.main:app --reload --port 8000
+```
+
+Si tienes problemas con la versión de Python (≥3.13 requerida), usa el workaround con `PYTHONPATH`:
+
+```bash
+$env:PYTHONPATH = "src"
+uv run uvicorn proyecto_isabelle.backend.main:app --reload --port 8000
+```
+
+### Endpoints
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/health` | Health check |
+| GET | `/api/exercises?limit=50&after_id=` | Lista ejercicios (paginación cursor) |
+| GET | `/api/exercises/pending` | Ejercicios pendientes de revisión |
+| GET | `/api/exercises/{id}` | Ejercicio por ID |
+| GET | `/api/exercises/by-name/{name}` | Ejercicio por nombre |
+| POST | `/api/exercises/{id}/review` | Enviar decisión (`approved`/`rejected`) |
+| GET | `/api/categories` | Lista categorías |
+```
