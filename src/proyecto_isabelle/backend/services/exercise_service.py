@@ -38,6 +38,10 @@ def get_exercise_by_name(name: str) -> ExerciseResponse | None:
 def submit_review(exercise_id: int, request: ReviewRequest) -> ReviewResponse:
     validation = validate_isabelle_code(request.corrected_thy_code)
 
+    # Evitar marcar como verificado si el código no pasa la validación básica.
+    if request.decision == "approved" and not validation.is_valid:
+        return ReviewResponse(success=False, isabelle_validation=validation)
+
     update_payload: dict = {
         "corrected_thy_code": request.corrected_thy_code,
     }
