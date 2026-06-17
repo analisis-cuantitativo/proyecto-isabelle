@@ -15,7 +15,8 @@ def main():
         return
 
     ex_resp = client.table("exercise").select("id", count="exact").execute()
-    total_exercises = ex_resp.count if hasattr(ex_resp, "count") else len(ex_resp.data or [])
+    count = getattr(ex_resp, "count", None)
+    total_exercises = count if isinstance(count, int) else len(ex_resp.data or [])
 
     if total_exercises == 0:
         print("Base de datos vacia — 0 ejercicios encontrados.")
