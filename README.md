@@ -73,4 +73,3 @@ uv run uvicorn proyecto_isabelle.backend.main:app --reload --port 8000
 | GET | `/api/exercises/by-name/{name}` | Ejercicio por nombre |
 | POST | `/api/exercises/{id}/review` | Enviar decisión (`approved`/`rejected`) |
 | GET | `/api/categories` | Lista categorías |
-```
