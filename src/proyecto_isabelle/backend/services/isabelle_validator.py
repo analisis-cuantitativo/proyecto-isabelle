@@ -24,6 +24,4 @@ def validate_isabelle_code(code: str) -> IsabelleValidationResult:
 
     is_valid = len(errors) == 0
 
-    return IsabelleValidationResult(
-        is_valid=is_valid, errors=errors, warnings=warnings
-    )
+    return IsabelleValidationResult(is_valid=is_valid, errors=errors, warnings=warnings)
