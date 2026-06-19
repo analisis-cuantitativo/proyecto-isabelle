@@ -2,22 +2,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from proyecto_isabelle.sync.models import Source
+from proyecto_isabelle.sync.models import Exercise
 
 
-class ExerciseResponse(BaseModel):
+class ExerciseResponse(Exercise):
     id: int
-    name: str
-    source: Source
-    topics: list[str] = Field(default_factory=list)
-    requirements: list[str] | None = None
-    is_verified: bool = False
-    msc_code: str | None = None
-    license: str | None = None
-    proposed_thy_code: str | None = None
-    corrected_thy_code: str | None = None
-    statement: str | None = None
-    proof: str | None = None
 
 
 type ReviewDecision = Literal["approved", "rejected"]
