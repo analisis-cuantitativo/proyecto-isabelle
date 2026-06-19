@@ -24,7 +24,13 @@ def main():
 
     print(f"Ejercicios encontrados: {total_exercises}")
 
-    top = client.table("exercise").select("id,name,is_verified").order("id").limit(10).execute()
+    top = (
+        client.table("exercise")
+        .select("id,name,is_verified")
+        .order("id")
+        .limit(10)
+        .execute()
+    )
     print("Primeros 10:")
     for row in top.data or []:
         verified = "✓" if row.get("is_verified") else "✗"
