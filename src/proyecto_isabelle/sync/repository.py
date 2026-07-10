@@ -173,3 +173,23 @@ class SupabaseRepository:
             self.client.table("exercise_requirement").insert(
                 {"exercise_id": exercise_id, "requirement_id": req_id}
             ).execute()
+
+    def read_with_empty_proposed_thy(self) -> list[Exercise]:
+        res_null = (
+            self.client.table("exercise_full")
+            .select("*")
+            .filter("proposed_thy_code", "is", "null")
+            .execute()
+        )
+
+        res_empty = (
+            self.client.table("exercise_full")
+            .select("*")
+            .eq("proposed_thy_code", "")
+            .execute()
+        )
+
+        return [
+            Exercise.model_validate(exercise)
+            for exercise in res_null.data + res_empty.data
+        ]
