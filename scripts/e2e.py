@@ -1,25 +1,21 @@
-"""
-One end-to-end example in which we ask an LLM to prove a theorem.
-"""
-
-from proyecto_isabelle.parse import markdown
 from proyecto_isabelle.prompts import PROMPT_FOR_EXERCISES, extract_thy_content
 from proyecto_isabelle.query.isabelle import query_content
 from proyecto_isabelle.query.llm import ask
-from proyecto_isabelle.util import ROOT_DIR, save_proof
+from proyecto_isabelle.util import save_proof
+from proyecto_isabelle.sync.repository import SupabaseRepository
 
 
-def main() -> None:
-    # Load the exercise
-    exercise_path = ROOT_DIR / "data" / "exercises" / "injectivity.md"
-    exercise = markdown.load_text(exercise_path)
-    print(f"Loaded exercise:\n{exercise}\n")
+def main(name="bolzano", model_name="anthropic/claude-sonnet-4-5-20250929") -> None:
+    repo = SupabaseRepository()
+
+    exercise = repo.read_as_exercise(name)
+    exercise_statement = exercise.statement
 
     # Create the prompt
-    prompt = PROMPT_FOR_EXERCISES.format(exercise=exercise)
+    prompt = PROMPT_FOR_EXERCISES.format(exercise=exercise_statement)
 
     # Query the LLM (using Claude Sonnet with extended thinking)
-    model = "anthropic/claude-sonnet-4-5-20250929"
+    model = model_name
     max_tokens = 4096 * 4
     thinking_budget = max_tokens // 4
     print(f"Querying {model} with thinking_budget={thinking_budget}...")
@@ -60,10 +56,9 @@ def main() -> None:
         print(f"  Errors: {result.errors}")
 
     # Save the proof
-    saved_path = save_proof(
+    save_proof(
         model=model,
-        exercise_path=exercise_path,
-        exercise=exercise,
+        exercise=exercise_statement,
         thy_content=thy_content,
         verified=result.verified,
         errors=result.errors,
@@ -71,7 +66,6 @@ def main() -> None:
         thinking=response.thinking,
         thinking_budget=thinking_budget,
     )
-    print(f"\nProof saved to: {saved_path}")
 
 
 if __name__ == "__main__":
