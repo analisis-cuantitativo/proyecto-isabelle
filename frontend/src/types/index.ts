@@ -45,15 +45,17 @@ export interface ReviewRequest {
   corrected_thy_code: string
 }
 
-export interface IsabelleValidationResult {
-  is_valid: boolean
+export interface IsabelleResponse {
+  success: boolean
+  verified: boolean
   errors: string[]
-  warnings: string[]
+  state?: string | null
+  message: string
 }
 
 export interface ReviewResponse {
   success: boolean
-  isabelle_validation?: IsabelleValidationResult
+  isabelle_validation?: IsabelleResponse
 }
 
 export interface CategoryResponse {

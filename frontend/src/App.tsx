@@ -15,30 +15,26 @@ import type { ReviewResponse } from './types'
 function ValidationFeedback({ feedback }: { feedback: ReviewResponse | null }) {
   if (!feedback?.isabelle_validation) return null
 
-  const { is_valid, errors, warnings } = feedback.isabelle_validation
+  const { verified, errors, message } = feedback.isabelle_validation
 
   return (
     <div
       className={`mt-4 p-4 rounded-xl border text-sm space-y-2 animate-fade-in ${
-        is_valid
+        verified
           ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
           : 'bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-400'
       }`}
     >
       <p className="font-semibold">
-        {is_valid ? 'Validacion Isabelle: OK' : 'Validacion Isabelle: Errores encontrados'}
+        {verified ? 'Validacion Isabelle: OK' : 'Validacion Isabelle: Errores encontrados'}
       </p>
+      {message && (
+        <p className="text-xs opacity-80">{message}</p>
+      )}
       {errors.length > 0 && (
         <ul className="list-disc list-inside space-y-1">
           {errors.map((e, i) => (
             <li key={i}>{e}</li>
-          ))}
-        </ul>
-      )}
-      {warnings.length > 0 && (
-        <ul className="list-disc list-inside text-amber-600 dark:text-amber-400 space-y-1">
-          {warnings.map((w, i) => (
-            <li key={i}>{w}</li>
           ))}
         </ul>
       )}
