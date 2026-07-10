@@ -1,8 +1,9 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from proyecto_isabelle.sync.models import Exercise
+from proyecto_isabelle.query.isabelle import IsabelleResponse
 
 
 class ExerciseResponse(Exercise):
@@ -17,15 +18,9 @@ class ReviewRequest(BaseModel):
     corrected_thy_code: str
 
 
-class IsabelleValidationResult(BaseModel):
-    is_valid: bool
-    errors: list[str] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-
-
 class ReviewResponse(BaseModel):
     success: bool
-    isabelle_validation: IsabelleValidationResult | None = None
+    isabelle_validation: IsabelleResponse | None = None
 
 
 class CategoryResponse(BaseModel):

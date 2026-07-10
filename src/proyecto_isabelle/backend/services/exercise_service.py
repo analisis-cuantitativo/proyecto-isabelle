@@ -39,7 +39,7 @@ class ExerciseService:
     def submit_review(self, exercise_id: int, request: ReviewRequest) -> ReviewResponse:
         validation = validate_isabelle_code(request.corrected_thy_code)
 
-        if request.decision == "approved" and not validation.is_valid:
+        if request.decision == "approved" and not validation.verified:
             return ReviewResponse(success=False, isabelle_validation=validation)
 
         update_payload: dict = {
@@ -47,10 +47,9 @@ class ExerciseService:
         }
         if request.decision == "approved":
             update_payload["is_verified"] = True
+            self.repo.update_exercise(exercise_id, update_payload)
         else:
             update_payload["is_verified"] = False
-
-        self.repo.update_exercise(exercise_id, update_payload)
 
         return ReviewResponse(success=True, isabelle_validation=validation)
 

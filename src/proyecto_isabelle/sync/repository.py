@@ -113,6 +113,17 @@ class SupabaseRepository:
             raise ValueError(f"Exercise not found: {exercise_name}")
         return response.data[0]
 
+    def read_as_exercise(self, exercise_name: str) -> Exercise:
+        response = (
+            self.client.table("exercise_full")
+            .select("*")
+            .eq("name", exercise_name)
+            .execute()
+        )
+        if not response.data:
+            raise ValueError(f"Exercise not found: {exercise_name}")
+        return Exercise.model_validate(response.data[0])
+
     def write(self, exercise: Exercise) -> None:
         """
         1. Resolve unique source (using exhaustive field matching).
@@ -173,3 +184,23 @@ class SupabaseRepository:
             self.client.table("exercise_requirement").insert(
                 {"exercise_id": exercise_id, "requirement_id": req_id}
             ).execute()
+
+    def read_with_empty_proposed_thy(self) -> list[Exercise]:
+        res_null = (
+            self.client.table("exercise_full")
+            .select("*")
+            .filter("proposed_thy_code", "is", "null")
+            .execute()
+        )
+
+        res_empty = (
+            self.client.table("exercise_full")
+            .select("*")
+            .eq("proposed_thy_code", "")
+            .execute()
+        )
+
+        return [
+            Exercise.model_validate(exercise)
+            for exercise in res_null.data + res_empty.data
+        ]

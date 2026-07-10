@@ -1,7 +1,6 @@
 from proyecto_isabelle.backend.dto import (
     CategoryResponse,
     ExerciseResponse,
-    IsabelleValidationResult,
     ReviewRequest,
     ReviewResponse,
 )
@@ -15,6 +14,5 @@ __all__ = [
     "ExerciseResponse",
     "ReviewRequest",
     "ReviewResponse",
-    "IsabelleValidationResult",
     "CategoryResponse",
 ]
