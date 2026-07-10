@@ -124,6 +124,28 @@ class SupabaseRepository:
             raise ValueError(f"Exercise not found: {exercise_name}")
         return Exercise.model_validate(response.data[0])
 
+    def get_missing_exercises_by_model(self, model_name: str) -> list[Exercise]:
+        """
+        Returns a list of exercises that have not been iterated by the given model.
+        """
+        benchmark_response = (
+            self.client.table("benchmark")
+            .select("exercise_id")
+            .eq("model_name", model_name)
+            .execute()
+        )
+
+        iterated_ids = [row["exercise_id"] for row in benchmark_response.data]
+
+        query = self.client.table("exercise_full").select("*")
+
+        if iterated_ids:
+            query = query.not_("id", "in", iterated_ids)
+
+        response = query.execute()
+
+        return [Exercise.model_validate(row) for row in response.data]
+
     def write(self, exercise: Exercise) -> None:
         """
         1. Resolve unique source (using exhaustive field matching).

@@ -5,7 +5,9 @@ from proyecto_isabelle.util import save_proof
 from proyecto_isabelle.sync.repository import SupabaseRepository
 
 
-def main(name="bolzano", model_name="anthropic/claude-sonnet-4-5-20250929") -> None:
+def main(
+    name: str = "bolzano", model_name: str = "anthropic/claude-sonnet-4-5-20250929"
+) -> None:
     repo = SupabaseRepository()
 
     exercise = repo.read_as_exercise(name)
@@ -58,6 +60,7 @@ def main(name="bolzano", model_name="anthropic/claude-sonnet-4-5-20250929") -> N
     # Save the proof
     save_proof(
         model=model,
+        exercise_name=name,
         exercise=exercise_statement,
         thy_content=thy_content,
         verified=result.verified,

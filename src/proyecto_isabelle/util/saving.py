@@ -8,7 +8,7 @@ from proyecto_isabelle.util import generate_hash, sanitize_model_name, PROOFS_DI
 
 def save_proof(
     model: str,
-    exercise_path: Path,
+    exercise_name: str,
     exercise: str,
     thy_content: str,
     verified: bool,
@@ -22,7 +22,6 @@ def save_proof(
     proof_hash = generate_hash(thy_content, timestamp)
 
     # Create exercise/model directory structure
-    exercise_name = exercise_path.stem
     proof_dir = (
         PROOFS_DIR / f"exercise={exercise_name}" / f"model={sanitize_model_name(model)}"
     )
@@ -45,7 +44,7 @@ def save_proof(
         "hash": proof_hash,
         "model": model,
         "timestamp": timestamp,
-        "exercise_path": str(exercise_path),
+        "exercise_name": exercise_name,
         "exercise": exercise,
         "verified": verified,
         "errors": errors,
