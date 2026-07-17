@@ -7,7 +7,7 @@ from proyecto_isabelle.backend.routers import categories, exercises
 
 app = FastAPI(title="Isabelle Reviewer API", version="1.0.0")
 
-cors_origin = os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:5173").split(",")
+cors_origin = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
