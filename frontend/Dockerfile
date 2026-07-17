@@ -10,12 +10,12 @@ COPY . .
 
 RUN npm run build
 
-FROM ngix:apline
+FROM nginx:alpine
 
-COPY --from=build /app/dist /usr/share/ngix/html
+COPY --from=build /app/dist /usr/share/nginx/html
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY ngix.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
-CMD ["ngixnx", "-g", "daemon off;"]
+CMD ["nginx", "-g", "daemon off;"]
