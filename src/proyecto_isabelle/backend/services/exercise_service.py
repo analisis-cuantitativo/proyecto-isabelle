@@ -53,8 +53,5 @@ class ExerciseService:
 
         return ReviewResponse(success=True, isabelle_validation=validation)
 
-    def get_categories(self) -> list:
-        raise NotImplementedError("categories not yet implemented")
-
 
 exercise_service = ExerciseService()
