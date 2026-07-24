@@ -57,21 +57,17 @@ def run_agent(
 
 
 def save_proof_result(
-    response: LLMResponse,
-    result: IsabelleResponse,
     exercise: Exercise,
-    thy_content: str,
-    thinking_budget: int,
+    agents_response: tuple[LLMResponse, IsabelleResponse],
+    prompt: str,
 ) -> None:
+    LLMResponse, IsabelleResponse = agents_response[0], agents_response[1]
     # Save the proof
     save_proof(
-        model=response.model,
-        exercise_name=exercise.name,
-        exercise=exercise.statement,
-        thy_content=thy_content,
-        verified=result.verified,
-        errors=result.errors,
-        raw_response=response.content or "",
-        thinking=response.thinking,
-        thinking_budget=thinking_budget,
+        exercise=exercise,
+        LLMResponse=LLMResponse,
+        IsabelleResponse=IsabelleResponse,
+        prompt=prompt,
     )
+
+    # save_online
