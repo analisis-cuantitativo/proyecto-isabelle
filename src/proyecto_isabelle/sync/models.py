@@ -18,8 +18,8 @@ class Exercise(BaseModel):
 
     name: str
     source: Source
-    topics: list[str]
-    requirements: list[str] | None
+    topics: list[str] | None = None
+    requirements: list[str] | None = None
     is_verified: bool
     msc_code: str | None = None
     license: str | None = None
