@@ -1,18 +1,17 @@
-from proyecto_isabelle.query.isabelle import query_content
-from proyecto_isabelle.query.llm import ask
+from proyecto_isabelle.query.isabelle import query_content, IsabelleResponse
+from proyecto_isabelle.query.llm import ask, LLMResponse
 from proyecto_isabelle.util import save_proof
 from proyecto_isabelle.sync.models import Exercise
+from proyecto_isabelle.sync.repository import SupabaseRepository
 from proyecto_isabelle.prompts import extract_thy_content
-from proyecto_isabelle.query.llm import LLMResponse
-from proyecto_isabelle.query.isabelle import IsabelleResponse
 
 
 def run_agent(
-    exercise: Exercise,
     prompt: str,
     model_name: str = "anthropic/claude-sonnet-4-5-20250929",
 ) -> tuple[LLMResponse, IsabelleResponse]:
     # Query the LLM (using Claude Sonnet with extended thinking)
+
     model = model_name
     max_tokens = 4096 * 4
     thinking_budget = max_tokens // 4
@@ -61,13 +60,24 @@ def save_proof_result(
     agents_response: tuple[LLMResponse, IsabelleResponse],
     prompt: str,
 ) -> None:
-    LLMResponse, IsabelleResponse = agents_response[0], agents_response[1]
+    repo = SupabaseRepository()
+
+    llm_response, isabelle_response = agents_response[0], agents_response[1]
+    thy = extract_thy_content(llm_response.content)
+
     # Save the proof
     save_proof(
         exercise=exercise,
-        LLMResponse=LLMResponse,
-        IsabelleResponse=IsabelleResponse,
+        llm_response=llm_response,
+        isabelle_response=isabelle_response,
         prompt=prompt,
+        thy=thy,
     )
 
-    # save_online
+    repo.save_online(
+        exercise=exercise,
+        llm_response=llm_response,
+        isabelle_response=isabelle_response,
+        prompt=prompt,
+        thy=thy,
+    )
