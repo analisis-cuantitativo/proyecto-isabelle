@@ -2,11 +2,13 @@ from proyecto_isabelle.backend.dto import (
     ExerciseResponse,
     ReviewRequest,
     ReviewResponse,
+    VerifyRequest,
 )
 from proyecto_isabelle.backend.repository import get_repository
 from proyecto_isabelle.backend.services.isabelle_validator import (
     validate_isabelle_code,
 )
+from proyecto_isabelle.query.isabelle import IsabelleResponse
 
 
 class ExerciseService:
@@ -35,6 +37,9 @@ class ExerciseService:
 
     def get_exercise_by_name(self, name: str) -> ExerciseResponse | None:
         return self.repo.get_exercise_by_name(name)
+
+    def verify_code(self, request: VerifyRequest) -> IsabelleResponse:
+        return validate_isabelle_code(request.corrected_thy_code)
 
     def submit_review(self, exercise_id: int, request: ReviewRequest) -> ReviewResponse:
         validation = validate_isabelle_code(request.corrected_thy_code)

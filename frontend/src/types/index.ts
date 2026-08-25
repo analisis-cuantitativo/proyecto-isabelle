@@ -58,11 +58,6 @@ export interface ReviewResponse {
   isabelle_validation?: IsabelleResponse
 }
 
-export interface CategoryResponse {
-  name: string
-  exercise_count: number
-}
-
 export interface PendingExercisesResponse {
   exercises: Exercise[]
   total: number

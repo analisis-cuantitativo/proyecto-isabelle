@@ -2,7 +2,7 @@ import type {
   Exercise,
   ReviewRequest,
   ReviewResponse,
-  CategoryResponse,
+  IsabelleResponse,
   PendingExercisesResponse,
   ListExercisesResponse,
   ApiEndpoint,
@@ -37,11 +37,6 @@ export class ApiService {
     return safeFetch<ListExercisesResponse>(`${API_BASE}/exercises?${query.toString()}`)
   }
 
-  static async fetchCategories(): Promise<CategoryResponse[]> {
-    const data = await safeFetch<CategoryResponse[]>(`${API_BASE}/categories`)
-    return data ?? []
-  }
-
   static async fetchApiEndpoints(): Promise<ApiEndpoint[]> {
     const HARDCODED: ApiEndpoint[] = [
       { method: 'GET', path: '/api/health', summary: 'Health check del servidor' },
@@ -50,7 +45,7 @@ export class ApiService {
       { method: 'GET', path: '/api/exercises/{exercise_id}', summary: 'Ejercicio por ID' },
       { method: 'GET', path: '/api/exercises/by-name/{exercise_name}', summary: 'Ejercicio por nombre' },
       { method: 'POST', path: '/api/exercises/{exercise_id}/review', summary: 'Enviar decisión de revisión' },
-      { method: 'GET', path: '/api/categories', summary: 'Lista de categorías' },
+      { method: 'POST', path: '/api/exercises/{exercise_id}/verify', summary: 'Verificar código con DeepIsaHOL' },
     ]
     try {
       const res = await fetch('/openapi.json')
@@ -86,5 +81,19 @@ export class ApiService {
       }
     )
     return data ?? { success: false }
+  }
+
+  static async verifyCode(
+    exerciseId: number,
+    code: string
+  ): Promise<IsabelleResponse | null> {
+    return safeFetch<IsabelleResponse>(
+      `${API_BASE}/exercises/${exerciseId}/verify`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ corrected_thy_code: code }),
+      }
+    )
   }
 }

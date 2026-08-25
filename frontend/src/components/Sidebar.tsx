@@ -1,32 +1,30 @@
 import { useEffect, useState } from 'react'
-import { Terminal } from 'lucide-react'
+import { Terminal, Loader2 } from 'lucide-react'
 import { ApiService } from '../services/api'
-import type { CategoryResponse, ApiEndpoint } from '../types'
-
-const CATEGORY_ICONS: Record<string, { color: string; dot: string }> = {
-  'Logic Basics': { color: 'bg-blue-400', dot: 'shadow-[0_0_8px_rgba(59,130,246,0.8)]' },
-  'Set Theory': { color: 'bg-purple-400', dot: 'shadow-[0_0_8px_rgba(168,85,247,0.8)]' },
-  Induction: { color: 'bg-emerald-400', dot: 'shadow-[0_0_8px_rgba(16,185,129,0.8)]' },
-  'Advanced Proofs': { color: 'bg-amber-400', dot: 'shadow-[0_0_8px_rgba(251,191,36,0.8)]' },
-}
-
-const FALLBACK_COLOR = 'bg-slate-400'
-const FALLBACK_DOT = 'shadow-[0_0_8px_rgba(148,163,184,0.8)]'
+import type { ApiEndpoint, Exercise } from '../types'
 
 interface SidebarProps {
   open: boolean
-  categories: CategoryResponse[]
+  exercises: Exercise[]
+  currentExerciseId: number | null
+  onSelectExercise: (id: number) => void
+  hasMore: boolean
+  onLoadMore: () => void
+  isLoadingMore: boolean
   reviewedCount: number
   totalExercises: number
-  hasVerified: boolean
 }
 
 export function Sidebar({
   open,
-  categories,
+  exercises,
+  currentExerciseId,
+  onSelectExercise,
+  hasMore,
+  onLoadMore,
+  isLoadingMore,
   reviewedCount,
   totalExercises,
-  hasVerified,
 }: SidebarProps) {
   const [endpoints, setEndpoints] = useState<ApiEndpoint[]>([])
   const [adminOpen, setAdminOpen] = useState(false)
@@ -89,67 +87,58 @@ export function Sidebar({
           </div>
         </section>
 
-        {/* Topics section */}
-        <section>
-          <h3
-            className={`text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 whitespace-nowrap transition-all duration-500 ease-out ${
-              open ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'
-            }`}
-          >
-            Topicos
-          </h3>
-          <ul className="space-y-1">
-            {categories.length === 0 && open && (
-              <li className="px-3 py-2 text-sm text-slate-400 italic">
-                Sin topicos
-              </li>
-            )}
-
-            {hasVerified && open && (
-              <li className="px-3 py-2">
-                <div className="relative">
-                  <div className="h-px w-full bg-gradient-to-r from-transparent via-slate-300/70 to-transparent dark:via-slate-600/50" />
-                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 text-[10px] font-bold tracking-widest uppercase text-slate-400 bg-slate-50 dark:bg-zinc-950">
-                    Revisados
-                  </span>
-                </div>
-              </li>
-            )}
-
-            {categories.map((cat) => {
-              const icon = CATEGORY_ICONS[cat.name] ?? {
-                color: FALLBACK_COLOR,
-                dot: FALLBACK_DOT,
-              }
-              return open ? (
-                <li
-                  key={cat.name}
-                  className="px-3 py-2 text-sm rounded-lg hover:bg-white/50 dark:hover:bg-white/5 transition-all duration-300 ease-out cursor-pointer flex items-center justify-between hover:translate-x-1"
-                >
-                  <span className="flex items-center gap-2">
-                    <span
-                      className={`w-2 h-2 rounded-full ${icon.color} ${icon.dot}`}
-                    />
-                    {cat.name}
-                  </span>
-                  <span className="text-xs text-slate-400 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full">
-                    {cat.exercise_count}
-                  </span>
+        {/* Exercises section */}
+        {open && (
+          <section>
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 whitespace-nowrap">
+              Ejercicios
+            </h3>
+            <ul className="space-y-1">
+              {exercises.length === 0 && (
+                <li className="px-3 py-2 text-sm text-slate-400 italic">
+                  Sin ejercicios
                 </li>
-              ) : (
-                <li
-                  key={cat.name}
-                  title={`${cat.name} (${cat.exercise_count})`}
-                  className="flex items-center justify-center py-2 cursor-pointer hover:bg-white/40 dark:hover:bg-white/5 rounded-lg transition-all duration-300 ease-out"
-                >
-                  <span
-                    className={`w-3 h-3 rounded-full ${icon.color} ${icon.dot} transition-transform duration-300 ease-out hover:scale-125`}
-                  />
-                </li>
-              )
-            })}
-          </ul>
-        </section>
+              )}
+
+              {exercises.map((ex) => {
+                const isActive = ex.id === currentExerciseId
+                return (
+                  <li key={ex.id}>
+                    <button
+                      onClick={() => onSelectExercise(ex.id)}
+                      className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-all duration-300 ease-out flex items-center gap-2 ${
+                        isActive
+                          ? 'bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-300'
+                          : 'hover:bg-white/50 dark:hover:bg-white/5 hover:translate-x-1 border border-transparent'
+                      }`}
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full shrink-0 ${
+                          ex.is_verified
+                            ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]'
+                            : 'bg-slate-400 shadow-[0_0_8px_rgba(148,163,184,0.6)]'
+                        }`}
+                        title={ex.is_verified ? 'Verificado' : 'Pendiente'}
+                      />
+                      <span className="truncate">{ex.name}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+
+            {hasMore && (
+              <button
+                onClick={onLoadMore}
+                disabled={isLoadingMore}
+                className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5 disabled:opacity-50 transition-all duration-300 ease-out"
+              >
+                {isLoadingMore && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {isLoadingMore ? 'Cargando...' : 'Cargar mas'}
+              </button>
+            )}
+          </section>
+        )}
 
         {/* Admin section */}
         <section>

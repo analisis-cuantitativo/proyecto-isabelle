@@ -45,7 +45,6 @@ function ValidationFeedback({ feedback }: { feedback: ReviewResponse | null }) {
 export default function App() {
   const { theme, toggleTheme } = useTheme()
   const {
-    categories,
     currentExercise,
     currentCode,
     exercises,
@@ -56,11 +55,18 @@ export default function App() {
     reviewedStack,
     currentIndex,
     isQueueEmpty,
+    isApproveEnabled,
+    isVerifying,
+    hasMore,
+    isLoadingMore,
     handleCodeChange,
     handleReview,
+    handleVerify,
     handleSkip,
     handlePrevious,
     handleUndo,
+    jumpToExercise,
+    loadMore,
     retryFetch,
   } = useExercises()
 
@@ -114,12 +120,16 @@ export default function App() {
 
       <Sidebar
         open={sidebarOpen}
-        categories={categories}
+        exercises={exercises}
+        currentExerciseId={currentExercise?.id ?? null}
+        onSelectExercise={jumpToExercise}
+        hasMore={hasMore}
+        onLoadMore={loadMore}
+        isLoadingMore={isLoadingMore}
         reviewedCount={reviewedStack.length}
         totalExercises={
           reviewedStack.length + (currentExercise ? 1 : 0)
         }
-        hasVerified={reviewedStack.some(e => e.is_verified)}
       />
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
@@ -201,6 +211,9 @@ export default function App() {
                   onSkip={onSkip}
                   onPrevious={onPrevious}
                   onUndo={handleUndo}
+                  onVerify={handleVerify}
+                  approveEnabled={isApproveEnabled}
+                  isVerifying={isVerifying}
                   canUndo={reviewedStack.length > 0}
                   canSkip={currentIndex < exercises.length - 1}
                   canPrevious={currentIndex > 0}

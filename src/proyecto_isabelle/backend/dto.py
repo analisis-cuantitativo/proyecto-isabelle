@@ -18,6 +18,10 @@ class ReviewRequest(BaseModel):
     corrected_thy_code: str
 
 
+class VerifyRequest(BaseModel):
+    corrected_thy_code: str
+
+
 class ReviewResponse(BaseModel):
     success: bool
     isabelle_validation: IsabelleResponse | None = None
