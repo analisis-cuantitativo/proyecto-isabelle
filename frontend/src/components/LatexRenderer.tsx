@@ -59,5 +59,5 @@ export function LatexRenderer({ content }: LatexRendererProps) {
     }
   }, [content, isLoaded])
 
-  return <div ref={containerRef} className="text-lg font-serif leading-relaxed" />
+  return <div ref={containerRef} className="text-lg md:text-xl font-serif leading-loose" />
 }

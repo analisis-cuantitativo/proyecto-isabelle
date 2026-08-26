@@ -84,13 +84,17 @@ export function ReviewControls({
         <button
           onClick={onApprove}
           disabled={!approveEnabled}
-          title={approveEnabled ? undefined : 'Verifica el codigo con DeepIsaHOL antes de aprobar'}
+          title={approveEnabled ? undefined : 'Valida con DeepIsaHOL primero'}
           className="group relative flex flex-col items-center justify-center w-20 h-20 bg-white/60 dark:bg-zinc-800/60 backdrop-blur-xl border border-white/60 dark:border-white/10 rounded-full hover:border-emerald-400/50 hover:bg-emerald-50/80 dark:hover:bg-emerald-900/20 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-white/60 disabled:hover:bg-white/60 dark:disabled:hover:bg-zinc-800/60 transition-all duration-500 ease-out shadow-xl shadow-slate-200/50 dark:shadow-black/30 hover:shadow-emerald-500/20"
           aria-label="Aprobar ejercicio"
         >
           <Check className="w-9 h-9 text-emerald-500 group-hover:scale-110 transition-transform duration-500 ease-out" />
-          <span className="absolute -bottom-8 text-xs font-bold text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out whitespace-nowrap tracking-widest uppercase">
-            Aprobar (&rarr;)
+          <span
+            className={`absolute -bottom-8 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out whitespace-nowrap tracking-widest uppercase ${
+              approveEnabled ? 'text-slate-400' : 'text-amber-500'
+            }`}
+          >
+            {approveEnabled ? 'Aprobar (→)' : 'Valida con DeepIsaHOL primero'}
           </span>
         </button>
       </section>

@@ -3,7 +3,7 @@ import { ApiService } from '../services/api'
 import { generatePatch } from '../utils/diff'
 import type { Exercise, ReviewResponse } from '../types'
 
-const EXERCISE_CACHE_KEY = 'exercise_cache_v1'
+const EXERCISE_CACHE_KEY = 'exercise_cache_v2'
 const PAGE_SIZE = 30
 
 function safeParseJSON<T>(value: string | null): T | null {
