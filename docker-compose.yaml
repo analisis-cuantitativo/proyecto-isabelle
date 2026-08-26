@@ -48,6 +48,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "5173:80"
+    environment:
+      - BACKEND_ADDR=backend:8000
     depends_on:
       - backend
     restart: unless-stopped

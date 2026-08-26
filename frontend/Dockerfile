@@ -14,7 +14,11 @@ FROM nginx:alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+
+# Local docker-compose default; override with the backend's Render-internal
+# "host:port" in production (see render.yaml).
+ENV BACKEND_ADDR=backend:8000
 
 EXPOSE 80
 
