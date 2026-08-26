@@ -1,9 +1,10 @@
 import os
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from proyecto_isabelle.backend.routers import exercises
+from proyecto_isabelle.backend.routers import auth, exercises
+from proyecto_isabelle.backend.security import verify_credentials
 
 app = FastAPI(title="Isabelle Reviewer API", version="1.0.0")
 
@@ -21,7 +22,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(exercises.router)
+app.include_router(auth.router)
+app.include_router(exercises.router, dependencies=[Depends(verify_credentials)])
 
 
 @app.get("/api/health")

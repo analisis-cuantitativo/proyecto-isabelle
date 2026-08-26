@@ -1,10 +1,12 @@
 import { useState, useCallback } from 'react'
 import { Database, History, Play, X } from 'lucide-react'
 import { useTheme } from './hooks/useTheme'
+import { useAuth } from './hooks/useAuth'
 import { useExercises } from './hooks/useExercises'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
+import { Login } from './components/Login'
 import { ExerciseCard } from './components/ExerciseCard'
 import { IsabelleEditor } from './components/IsabelleEditor'
 import { HistoryPanel } from './components/HistoryPanel'
@@ -44,6 +46,7 @@ function ValidationFeedback({ feedback }: { feedback: ReviewResponse | null }) {
 
 export default function App() {
   const { theme, toggleTheme } = useTheme()
+  const { isAuthenticated, login, logout } = useAuth()
   const {
     currentExercise,
     currentCode,
@@ -84,6 +87,10 @@ export default function App() {
     { onApprove, onReject, onSkip, onPrevious, onUndo: handleUndo },
     !isQueueEmpty
   )
+
+  if (!isAuthenticated) {
+    return <Login onLogin={login} />
+  }
 
   if (isLoading) {
     return (
@@ -140,6 +147,7 @@ export default function App() {
           topic={currentExercise?.topics?.[0]}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={toggleSidebar}
+          onLogout={logout}
         />
 
         <div className="flex-1 overflow-y-auto p-8 flex justify-center">

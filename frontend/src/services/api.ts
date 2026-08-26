@@ -9,10 +9,27 @@ import type {
 } from '../types'
 
 const API_BASE = '/api'
+const AUTH_STORAGE_KEY = 'auth_credentials'
+
+function getAuthHeaders(): HeadersInit {
+  try {
+    const token = localStorage.getItem(AUTH_STORAGE_KEY)
+    return token ? { Authorization: `Basic ${token}` } : {}
+  } catch {
+    return {}
+  }
+}
 
 async function safeFetch<T>(url: string, options?: RequestInit): Promise<T | null> {
   try {
-    const res = await fetch(url, options)
+    const res = await fetch(url, {
+      ...options,
+      headers: { ...getAuthHeaders(), ...(options?.headers ?? {}) },
+    })
+    if (res.status === 401) {
+      window.dispatchEvent(new Event('auth:unauthorized'))
+      return null
+    }
     if (!res.ok) return null
     return res.json()
   } catch {

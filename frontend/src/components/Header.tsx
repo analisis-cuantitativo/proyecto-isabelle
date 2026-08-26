@@ -1,4 +1,4 @@
-import { Moon, Sun, PanelLeftOpen, PanelLeftClose } from 'lucide-react'
+import { LogOut, Moon, Sun, PanelLeftOpen, PanelLeftClose } from 'lucide-react'
 
 interface HeaderProps {
   theme: 'dark' | 'light'
@@ -7,6 +7,7 @@ interface HeaderProps {
   topic: string | undefined
   sidebarOpen: boolean
   onToggleSidebar: () => void
+  onLogout: () => void
 }
 
 export function Header({
@@ -16,6 +17,7 @@ export function Header({
   topic,
   sidebarOpen,
   onToggleSidebar,
+  onLogout,
 }: HeaderProps) {
   return (
     <header className="h-16 border-b border-white/40 dark:border-white/10 flex items-center justify-between px-6 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-2xl z-10 shadow-sm">
@@ -51,6 +53,14 @@ export function Header({
           ) : (
             <Moon className="w-4 h-4 group-hover:-rotate-12 transition-transform duration-500 ease-out" />
           )}
+        </button>
+
+        <button
+          onClick={onLogout}
+          className="p-2 rounded-full bg-white/40 dark:bg-zinc-800/40 hover:bg-white/80 dark:hover:bg-zinc-700/80 border border-white/50 dark:border-white/10 transition-all duration-500 ease-out shadow-sm"
+          aria-label="Cerrar sesion"
+        >
+          <LogOut className="w-4 h-4" />
         </button>
       </div>
     </header>
