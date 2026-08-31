@@ -16,6 +16,7 @@ class Source(BaseModel):
 class Exercise(BaseModel):
     """Dedicated object for exercises using Pydantic, as requested in the issue"""
 
+    id: int | None = None
     name: str
     source: Source
     topics: list[str] | None = None

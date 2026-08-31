@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from proyecto_isabelle.sync.models import Exercise, Source
 from proyecto_isabelle.query.llm.models import LLMResponse
 from proyecto_isabelle.query.isabelle import IsabelleResponse
+from proyecto_isabelle.util.saving import to_benchmark
 
 load_dotenv()
 
@@ -129,23 +130,19 @@ class SupabaseRepository:
         exercise: Exercise,
         llm_response: LLMResponse,
         isabelle_response: IsabelleResponse,
-        prompt: str,
-        thy_response,
+        prompt: str | None,
+        thy_response: str | None,
     ) -> None:
-        db_benchmark = {
-            "exercise_id": exercise.id,
-            "model_name": llm_response.model,
-            "was_given_the_correct_thy_statement": prompt,
-            "thy_results": thy_response,
-            "thoughts": llm_response.thinking,
-            "tokens_consumed": llm_response.usage.total_tokens,
-            "num_of_passes": llm_response,
-            "max_num_of_passes": prompt,
-            "correctly_verified": isabelle_response.verified,
-            "deepisahol_metadata": isabelle_response,
-        }
-
-        self.client.table("benchmark").insert(db_benchmark).execute()
+        benchmark = to_benchmark(
+            exercise=exercise,
+            llm_response=llm_response,
+            isabelle_response=isabelle_response,
+            prompt=prompt,
+            thy_response=thy_response,
+        )
+        self.client.table("benchmark").insert(
+            benchmark.model_dump(mode="json")
+        ).execute()
 
     def _sync_link_table(
         self, table: str, fk_column: str, exercise_id: int, wanted_ids: list[int]

@@ -19,6 +19,3 @@ def model_benchmark(model_name: str, dry_run: bool = True, proof: bool = False) 
             )
 
             run_agent(prompt, model_name)
-
-
-# def model_benchmark_for_exercise(exercise_id: int, model_name: str) -> None:
