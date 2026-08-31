@@ -1,5 +1,6 @@
-from typing import Optional
+import os
 from pathlib import Path
+from typing import Optional
 
 import httpx
 from pydantic import BaseModel, Field
@@ -7,6 +8,12 @@ from pydantic import BaseModel, Field
 from proyecto_isabelle.parse import thy
 
 DEFAULT_TIMEOUT = 60
+
+
+def _resolve_api_url(api_url: str | None) -> str:
+    if api_url is not None:
+        return api_url
+    return os.getenv("ISABELLE_API_URL", "http://localhost:8000")
 
 
 class IsabelleRequest(BaseModel):
@@ -45,7 +52,8 @@ class IsabelleResponse(BaseModel):
     message: str = Field(..., description="Human-readable message about the result")
 
 
-def _verify_server_is_running(api_url: str = "http://localhost:8000") -> None:
+def _verify_server_is_running(api_url: str | None = None) -> None:
+    api_url = _resolve_api_url(api_url)
     with httpx.Client(timeout=DEFAULT_TIMEOUT) as client:
         try:
             resp = client.get(f"{api_url.rstrip('/')}/health")
@@ -64,15 +72,14 @@ def _verify_server_is_running(api_url: str = "http://localhost:8000") -> None:
 
 def query_file(
     path: Path | str,
-    api_url: str = "http://localhost:8000",
+    api_url: str | None = None,
 ) -> IsabelleResponse:
     content = thy.load_text(path)
     return query_content(content, api_url=api_url)
 
 
-def query_content(
-    content: str, api_url: str = "http://localhost:8000"
-) -> IsabelleResponse:
+def query_content(content: str, api_url: str | None = None) -> IsabelleResponse:
+    api_url = _resolve_api_url(api_url)
     _verify_server_is_running(api_url)
     payload = IsabelleRequest(thy_content=content)
 

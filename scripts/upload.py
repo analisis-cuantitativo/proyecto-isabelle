@@ -6,7 +6,6 @@ from typing import Annotated, Optional
 import typer
 from rich.console import Console
 
-from proyecto_isabelle.sync import SYNC_DIRS, GCSClient, upload_to_gcs
 from proyecto_isabelle.sync.operations import (
     load_exercise_from_path,
     upload_exercise_to_db,
@@ -20,14 +19,6 @@ console = Console()
 
 @app.command()
 def main(
-    subdir: Annotated[
-        Optional[str],
-        typer.Option(
-            "--subdir",
-            "-s",
-            help=f"Subdirectory to upload to GCS ({', '.join(SYNC_DIRS)}). Default: all.",
-        ),
-    ] = None,
     path: Annotated[
         Optional[Path],
         typer.Option(
@@ -109,48 +100,6 @@ def main(
 
         console.print("[bold green]Database bulk upload complete.[/bold green]")
         return
-
-    # If a database path was not provided,
-    # we proceed to upload to GCS.
-
-    # Validate subdir if provided
-    if subdir is not None and subdir not in SYNC_DIRS:
-        console.print(f"[red]Invalid subdir: {subdir}[/red]")
-        console.print(f"[dim]Valid options: {', '.join(SYNC_DIRS)}[/dim]")
-        raise typer.Exit(1)
-
-    # Create client
-    try:
-        client = GCSClient()
-        console.print(f"[bold]Bucket:[/bold] {client.bucket_name}")
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
-
-    # Run upload
-    scope = subdir if subdir else "all directories"
-    console.print(f"[bold]Uploading to GCS:[/bold] {scope}\n")
-
-    with console.status("[bold green]Uploading files...") if not verbose else console:
-        result = upload_to_gcs(
-            client=client,
-            subdir=subdir,
-            dry_run=dry_run,
-            verbose=verbose,
-            console=console,
-        )
-
-    # Print summary
-    console.print()
-    if dry_run:
-        console.print(f"[cyan]Would upload: {result.uploaded} files[/cyan]")
-    else:
-        console.print(f"[green]Uploaded: {result.uploaded} files[/green]")
-    console.print(f"[dim]Skipped (unchanged): {result.skipped} files[/dim]")
-
-    if result.errors:
-        console.print(f"[red]Errors: {len(result.errors)}[/red]")
-        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

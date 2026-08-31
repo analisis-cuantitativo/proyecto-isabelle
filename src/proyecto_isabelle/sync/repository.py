@@ -1,4 +1,7 @@
 import os
+from dataclasses import dataclass
+from enum import Enum
+
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
@@ -7,6 +10,19 @@ from proyecto_isabelle.query.llm.models import LLMResponse
 from proyecto_isabelle.query.isabelle import IsabelleResponse
 
 load_dotenv()
+
+
+class WriteStatus(str, Enum):
+    CREATED = "created"
+    UPDATED = "updated"
+    UNCHANGED = "unchanged"
+
+
+@dataclass(frozen=True, slots=True)
+class WriteResult:
+    status: WriteStatus
+    exercise_id: int
+    changed_fields: set[str]
 
 
 class SupabaseRepository:
@@ -34,6 +50,11 @@ class SupabaseRepository:
                 "password": supabase_password,
             }
         )
+
+    @staticmethod
+    def _norm(value):
+        """Cadena vacía y None son el mismo estado: 'no hay valor'."""
+        return None if value == "" else value
 
     def _get_or_create_author(self, author_name: str) -> int:
         """Search for author by name."""
@@ -126,6 +147,36 @@ class SupabaseRepository:
 
         self.client.table("benchmark").insert(db_benchmark).execute()
 
+    def _sync_link_table(
+        self, table: str, fk_column: str, exercise_id: int, wanted_ids: list[int]
+    ) -> bool:
+        """Diff-based sync of a join table. Returns True if anything changed."""
+        rows = (
+            self.client.table(table)
+            .select(fk_column)
+            .eq("exercise_id", exercise_id)
+            .execute()
+        )
+        current_ids = {row[fk_column] for row in rows.data}
+        wanted = set(wanted_ids)
+
+        if current_ids == wanted:
+            return False
+
+        to_delete = current_ids - wanted
+        if to_delete:
+            self.client.table(table).delete().eq("exercise_id", exercise_id).in_(
+                fk_column, list(to_delete)
+            ).execute()
+
+        to_insert = wanted - current_ids
+        if to_insert:
+            self.client.table(table).insert(
+                [{"exercise_id": exercise_id, fk_column: fk_id} for fk_id in to_insert]
+            ).execute()
+
+        return True
+
     def read(self, exercise_name: str) -> dict:
         """Reads an exercise by name."""
         response = (
@@ -171,12 +222,15 @@ class SupabaseRepository:
 
         return [Exercise.model_validate(row) for row in response.data]
 
-    def write(self, exercise: Exercise) -> None:
+    def write(self, exercise: Exercise) -> WriteResult:
         """
         1. Resolve unique source (using exhaustive field matching).
         2. Identify exercise by composite key: Name + SourceID.
-        3. Perform Upsert (Update or Insert).
+        3. Insert, or update ONLY the provided fields that actually differ.
         4. Synchronize M:N relationships (Topics and Requirements).
+
+        Fields absent from the input are never touched. Fields explicitly set
+        to None are written as NULL.
         """
         # Resolve source using exhaustive validation
         source_id = self._get_or_create_source(exercise.source)
@@ -184,12 +238,16 @@ class SupabaseRepository:
         # Check if exercise exists within this specific source
         resp = (
             self.client.table("exercise")
-            .select("id")
+            .select("*")
             .eq("name", exercise.name)
             .eq("source_id", source_id)
             .execute()
         )
 
+        # Which keys the input actually carried (absent != None)
+        provided = exercise.model_dump(exclude_unset=True)
+
+        # map the Exercise
         db_payload = {
             "name": exercise.name,
             "source_id": source_id,
@@ -202,52 +260,88 @@ class SupabaseRepository:
             "proof": exercise.proof,
         }
 
-        # Update or Insert
-        if resp.data:
-            exercise_id = resp.data[0]["id"]
-            self.client.table("exercise").update(db_payload).eq(
-                "id", exercise_id
-            ).execute()
-        else:
+        # filter out fields
+        db_payload = {
+            key: self._norm(value)
+            for key, value in db_payload.items()
+            if key in provided or key in ("name", "source_id")
+        }
+
+        # Upsert
+        if not resp.data:
             ex_resp = self.client.table("exercise").insert(db_payload).execute()
             exercise_id = ex_resp.data[0]["id"]
+            created = True
+        else:
+            current = resp.data[0]
+            exercise_id = current["id"]
+            created = False
 
-        # Clear old links, add new ones
-        self.client.table("exercise_topic").delete().eq(
-            "exercise_id", exercise_id
-        ).execute()
-        self.client.table("exercise_requirement").delete().eq(
-            "exercise_id", exercise_id
-        ).execute()
+            # Identity is the lookup key: never part of the diff
+            db_payload.pop("name")
+            db_payload.pop("source_id")
 
-        for topic_name in exercise.topics:
-            topic_id = self._get_or_create_topic(topic_name)
-            self.client.table("exercise_topic").insert(
-                {"exercise_id": exercise_id, "topic_id": topic_id}
-            ).execute()
+            db_payload = {
+                key: value
+                for key, value in db_payload.items()
+                if self._norm(current.get(key)) != value
+            }
 
-        for req_name in exercise.requirements or []:
-            req_id = self._get_or_create_requirement(req_name)
-            self.client.table("exercise_requirement").insert(
-                {"exercise_id": exercise_id, "requirement_id": req_id}
-            ).execute()
+            # El enunciado cambió: el trabajo previo ya no le corresponde
+            if "statement" in db_payload:
+                if "proposed_thy_code" not in provided:
+                    db_payload["proposed_thy_code"] = None
+                if "corrected_thy_code" not in provided:
+                    db_payload["corrected_thy_code"] = None
+                if "is_verified" not in provided:
+                    db_payload["is_verified"] = False
+
+            if db_payload:
+                self.client.table("exercise").update(db_payload).eq(
+                    "id", exercise_id
+                ).execute()
+
+        # M:N: only the relations the input mentioned
+        changed_links: set[str] = set()
+
+        if "topics" in provided:
+            topic_ids = [
+                self._get_or_create_topic(topic_name)
+                for topic_name in exercise.topics or []
+            ]
+            if self._sync_link_table(
+                "exercise_topic", "topic_id", exercise_id, topic_ids
+            ):
+                changed_links.add("topics")
+
+        if "requirements" in provided:
+            req_ids = [
+                self._get_or_create_requirement(req_name)
+                for req_name in exercise.requirements or []
+            ]
+            if self._sync_link_table(
+                "exercise_requirement", "requirement_id", exercise_id, req_ids
+            ):
+                changed_links.add("requirements")
+
+        # Report
+        if created:
+            return WriteResult(WriteStatus.CREATED, exercise_id, set(db_payload))
+
+        if not db_payload and not changed_links:
+            return WriteResult(WriteStatus.UNCHANGED, exercise_id, set())
+
+        return WriteResult(
+            WriteStatus.UPDATED, exercise_id, set(db_payload) | changed_links
+        )
 
     def read_with_empty_proposed_thy(self) -> list[Exercise]:
-        res_null = (
+        # Un solo request usando .or_()
+        response = (
             self.client.table("exercise_full")
             .select("*")
-            .filter("proposed_thy_code", "is", "null")
+            .or_("proposed_thy_code.is.null,proposed_thy_code.eq.")
             .execute()
         )
 
-        res_empty = (
-            self.client.table("exercise_full")
-            .select("*")
-            .eq("proposed_thy_code", "")
-            .execute()
-        )
-
-        return [
-            Exercise.model_validate(exercise)
-            for exercise in res_null.data + res_empty.data
-        ]
+        return [Exercise.model_validate(ex) for ex in response.data]

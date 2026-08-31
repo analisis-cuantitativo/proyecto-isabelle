@@ -1,12 +1,12 @@
 from proyecto_isabelle.backend.dto import (
     CategoryResponse,
     ExerciseResponse,
-    IsabelleValidationResult,
     ReviewRequest,
     ReviewResponse,
 )
 from proyecto_isabelle.backend.main import app
 from proyecto_isabelle.backend.repository import APIReviewRepository, get_repository
+from proyecto_isabelle.query.isabelle import IsabelleResponse
 
 __all__ = [
     "app",
@@ -15,6 +15,6 @@ __all__ = [
     "ExerciseResponse",
     "ReviewRequest",
     "ReviewResponse",
-    "IsabelleValidationResult",
+    "IsabelleResponse",
     "CategoryResponse",
 ]

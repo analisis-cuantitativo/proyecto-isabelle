@@ -4,8 +4,10 @@ from proyecto_isabelle.backend.dto import (
     ExerciseResponse,
     ReviewRequest,
     ReviewResponse,
+    VerifyRequest,
 )
 from proyecto_isabelle.backend.services.exercise_service import exercise_service
+from proyecto_isabelle.query.isabelle import IsabelleResponse
 
 router = APIRouter(prefix="/api/exercises", tags=["exercises"])
 
@@ -53,3 +55,11 @@ def review_exercise(exercise_id: int, request: ReviewRequest):
     if not exercise:
         raise HTTPException(status_code=404, detail="Ejercicio no encontrado")
     return exercise_service.submit_review(exercise_id, request)
+
+
+@router.post("/{exercise_id}/verify", response_model=IsabelleResponse)
+def verify_exercise(exercise_id: int, request: VerifyRequest):
+    exercise = exercise_service.get_exercise_by_id(exercise_id)
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Ejercicio no encontrado")
+    return exercise_service.verify_code(request)
