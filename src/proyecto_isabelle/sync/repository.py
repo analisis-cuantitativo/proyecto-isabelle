@@ -6,6 +6,9 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 
 from proyecto_isabelle.sync.models import Exercise, Source
+from proyecto_isabelle.query.llm.models import LLMResponse
+from proyecto_isabelle.query.isabelle import IsabelleResponse
+from proyecto_isabelle.util.saving import to_benchmark
 
 load_dotenv()
 
@@ -122,6 +125,25 @@ class SupabaseRepository:
         )
         return insert_resp.data[0]["id"]
 
+    def save_online(
+        self,
+        exercise: Exercise,
+        llm_response: LLMResponse,
+        isabelle_response: IsabelleResponse,
+        prompt: str | None,
+        thy_response: str | None,
+    ) -> None:
+        benchmark = to_benchmark(
+            exercise=exercise,
+            llm_response=llm_response,
+            isabelle_response=isabelle_response,
+            prompt=prompt,
+            thy_response=thy_response,
+        )
+        self.client.table("benchmark").insert(
+            benchmark.model_dump(mode="json")
+        ).execute()
+
     def _sync_link_table(
         self, table: str, fk_column: str, exercise_id: int, wanted_ids: list[int]
     ) -> bool:
@@ -174,6 +196,28 @@ class SupabaseRepository:
         if not response.data:
             raise ValueError(f"Exercise not found: {exercise_name}")
         return Exercise.model_validate(response.data[0])
+
+    def get_missing_exercises_by_model(self, model_name: str) -> list[Exercise]:
+        """
+        Returns a list of exercises that have not been iterated by the given model.
+        """
+        benchmark_response = (
+            self.client.table("benchmark")
+            .select("exercise_id")
+            .eq("model_name", model_name)
+            .execute()
+        )
+
+        iterated_ids = [row["exercise_id"] for row in benchmark_response.data]
+
+        query = self.client.table("exercise_full").select("*")
+
+        if iterated_ids:
+            query = query.not_("id", "in", iterated_ids)
+
+        response = query.execute()
+
+        return [Exercise.model_validate(row) for row in response.data]
 
     def write(self, exercise: Exercise) -> WriteResult:
         """
