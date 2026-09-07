@@ -44,9 +44,10 @@ def run_agent(
 
     logger.debug("Extracted .thy content:\n%s", thy_content)
 
-    # Query Isabelle for verification
+    # Query Isabelle for verification. Build mode honours the model's `imports`
+    # (against the prebuilt Benchmark heap) and fails proofs left with sorry/oops.
     logger.info("Verifying with Isabelle...")
-    result = query_content(thy_content)
+    result = query_content(thy_content, mode="build")
 
     logger.info(
         "Isabelle verification result: success=%s verified=%s message=%s",
