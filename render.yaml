@@ -4,11 +4,11 @@ services:
   - type: pserv
     name: deepisahol
     runtime: docker
-    plan: standard          # needs real CPU/RAM for Isabelle+AFP; test and adjust
+    plan: starter           # start small; bump to standard/pro if Isabelle+AFP needs more CPU/RAM
     region: oregon
     dockerfilePath: ./DeepIsaHOL/Dockerfile
     dockerContext: ./DeepIsaHOL
-    healthCheckPath: /health
+    # No healthCheckPath: Render rejects it for pserv (private) services.
     envVars:
       - key: PY4J_PORT
         value: 25333
