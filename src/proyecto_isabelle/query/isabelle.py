@@ -11,9 +11,13 @@ DEFAULT_TIMEOUT = 60
 
 
 def _resolve_api_url(api_url: str | None) -> str:
-    if api_url is not None:
-        return api_url
-    return os.getenv("ISABELLE_API_URL", "http://localhost:8000")
+    if api_url is None:
+        api_url = os.getenv("ISABELLE_API_URL", "http://localhost:8000")
+    if "://" not in api_url:
+        # Render's `fromService: ... property: hostport` resolves to a bare
+        # "host:port" with no scheme; the private network is plain HTTP.
+        api_url = f"http://{api_url}"
+    return api_url
 
 
 class IsabelleRequest(BaseModel):

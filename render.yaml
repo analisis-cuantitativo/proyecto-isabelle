@@ -25,9 +25,9 @@ services:
     dockerContext: .
     healthCheckPath: /api/health
     envVars:
-      # NOTE: fromService/hostport resolves to "host:port" with no scheme.
-      # Confirm src/proyecto_isabelle/query/isabelle.py accepts that, or
-      # prefix with http:// there (Blueprint YAML can't concatenate strings).
+      # fromService/hostport resolves to "host:port" with no scheme;
+      # _resolve_api_url() in src/proyecto_isabelle/query/isabelle.py
+      # prepends http:// when one is missing.
       - key: ISABELLE_API_URL
         fromService:
           name: deepisahol
