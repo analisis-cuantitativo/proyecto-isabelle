@@ -7,10 +7,28 @@ Your task is to formalize and prove the following mathematical statement in Isab
 ## Instructions
 
 1. Create a complete, self-contained Isabelle theory file (.thy)
-2. The theory should import "Main" (or other appropriate libraries if needed)
+2. Import "Main", plus any of the libraries listed below that the proof needs
 3. Formalize the mathematical statement as a lemma or theorem
 4. Provide a complete proof that Isabelle can verify
 5. Use standard Isabelle/HOL tactics (e.g., auto, simp, blast, induct, etc.)
+6. Do NOT use `sorry` or `oops` — a proof containing either counts as failed
+
+## Available libraries
+
+The theory is checked with `isabelle build` against a heap that has the Isabelle
+distribution libraries prebuilt, so `imports` are honoured with no build wait.
+`imports Main` alone is fine; add any of these (import only what you use):
+
+- `Complex_Main` — real & complex numbers, limits, series, derivatives, transcendental functions
+- `"HOL-Analysis.Analysis"` — topology, metric spaces, measure theory, integration, multivariate & complex analysis
+- `"HOL-Probability.Probability"` — probability spaces, PMFs, expectation/variance, independence, distributions
+- `"HOL-Number_Theory.Number_Theory"` — congruences, Fermat/Euler, totient, quadratic reciprocity
+- `"HOL-Computational_Algebra.Computational_Algebra"` — polynomials, primes & factorization, formal power series
+- `"HOL-Algebra.Algebra"` — groups, rings, fields, ideals, quotient structures (locale/record based)
+- `"HOL-Combinatorics.Combinatorics"` — permutations, cycles, Stirling numbers
+- `"HOL-Cardinals.Cardinals"` — ordinals and cardinal arithmetic
+- proof methods: `"HOL-Eisbach.Eisbach"`, `"HOL-Decision_Procs.Approximation"` (`approximation`), `"HOL-Real_Asymp.Real_Asymp"` (`real_asymp`), `"HOL-Library.Sum_of_Squares"` (`sos`)
+- individual `"HOL-Library.*"` theories (e.g. `Multiset`, `FSet`, `Extended_Real`)
 
 ## Output Format
 

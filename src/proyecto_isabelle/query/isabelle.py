@@ -1,6 +1,8 @@
 import os
+import re
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
+from uuid import uuid4
 
 import httpx
 from pydantic import BaseModel, Field
@@ -8,6 +10,27 @@ from pydantic import BaseModel, Field
 from proyecto_isabelle.parse import thy
 
 DEFAULT_TIMEOUT = 60
+DEFAULT_PARENT_SESSION = "Benchmark"
+
+# Sibling library sessions bundled into the DeepIsaHOL image's `Benchmark` heap.
+# They are declared in the generated ROOT so a submitted theory can `imports` any
+# of them without triggering an on-the-fly session build.
+BENCHMARK_SIBLING_SESSIONS = (
+    "HOL-Number_Theory",
+    "HOL-Algebra",
+    "HOL-Combinatorics",
+    "HOL-Cardinals",
+    "HOL-Computational_Algebra",
+    "HOL-Decision_Procs",
+    "HOL-Real_Asymp",
+    "HOL-Eisbach",
+)
+
+Mode = Literal["build", "verify"]
+
+_THEORY_HEADER = re.compile(r"\btheory\s+([A-Za-z][\w']*)")
+_UNSOUND_COMMAND = re.compile(r"\b(sorry|oops)\b")
+_ISABELLE_COMMENT = re.compile(r"\(\*.*?\*\)", re.DOTALL)
 
 
 def _resolve_api_url(api_url: str | None) -> str:
@@ -21,7 +44,7 @@ def _resolve_api_url(api_url: str | None) -> str:
 
 
 class IsabelleRequest(BaseModel):
-    """Request model for proof verification."""
+    """Payload for the DeepIsaHOL ``/verify`` endpoint (REPL, fast path)."""
 
     thy_content: str = Field(
         ..., description="The complete content of the .thy file to verify"
@@ -38,22 +61,33 @@ class IsabelleRequest(BaseModel):
 
 
 class IsabelleResponse(BaseModel):
-    """Response model for proof verification."""
+    """Uniform validation result, whichever endpoint produced it."""
 
     success: bool = Field(
-        ..., description="Whether the API call completed successfully"
+        ..., description="Whether the API call itself completed successfully"
     )
-    verified: bool = Field(
-        ..., description="Whether the proof was successfully verified"
-    )
+    verified: bool = Field(..., description="Whether the proof is complete and correct")
     errors: list[str] = Field(
         default_factory=list,
-        description="List of error messages if verification failed",
+        description="Human-readable error messages if validation failed",
     )
     state: Optional[str] = Field(
-        default=None, description="The final Isabelle state after verification"
+        default=None,
+        description="Final Isabelle state after verification (verify mode only)",
     )
     message: str = Field(..., description="Human-readable message about the result")
+
+    # --- additive fields: populated in build mode, inert in verify mode ---
+    mode: Mode = Field(
+        default="verify", description="Which validation path produced this result"
+    )
+    build_log: Optional[str] = Field(
+        default=None, description="Full `isabelle build` output (build mode only)"
+    )
+    errors_structured: list[dict] = Field(
+        default_factory=list,
+        description="Raw {theory, line, message} errors (build mode only)",
+    )
 
 
 def _verify_server_is_running(api_url: str | None = None) -> None:
@@ -74,24 +108,167 @@ def _verify_server_is_running(api_url: str | None = None) -> None:
             )
 
 
+def _strip_comments(text: str) -> str:
+    prev = None
+    while prev != text:
+        prev = text
+        text = _ISABELLE_COMMENT.sub(" ", text)
+    return text
+
+
+def _incomplete_commands(thy_content: str) -> list[str]:
+    """`sorry` / `oops` left in the proof text make a green build meaningless."""
+    return sorted(
+        {m.group(1) for m in _UNSOUND_COMMAND.finditer(_strip_comments(thy_content))}
+    )
+
+
+def _extract_theory_name(thy_content: str) -> str:
+    match = _THEORY_HEADER.search(_strip_comments(thy_content))
+    if not match:
+        raise ValueError(
+            "Submitted content has no `theory <Name>` header; cannot build it."
+        )
+    return match.group(1)
+
+
+def _format_build_error(err: dict) -> str:
+    where = err.get("theory") or ""
+    if where and err.get("line"):
+        where = f"{where}:{err['line']}"
+    prefix = f"{where}: " if where else ""
+    return f"{prefix}{err.get('message', '')}".strip()
+
+
+def _make_root(session_name: str, parent_session: str, theory_name: str) -> str:
+    sessions_block = ""
+    if parent_session == DEFAULT_PARENT_SESSION:
+        listed = "\n".join(f'    "{s}"' for s in BENCHMARK_SIBLING_SESSIONS)
+        sessions_block = f"  sessions\n{listed}\n"
+    return (
+        f'session {session_name} = "{parent_session}" +\n'
+        f"{sessions_block}"
+        f"  theories\n"
+        f"    {theory_name}\n"
+    )
+
+
 def query_file(
     path: Path | str,
     api_url: str | None = None,
+    *,
+    mode: Mode = "build",
+    parent_session: str = DEFAULT_PARENT_SESSION,
+    allow_incomplete: bool = False,
+    timeout_seconds: int = 300,
 ) -> IsabelleResponse:
     content = thy.load_text(path)
-    return query_content(content, api_url=api_url)
+    return query_content(
+        content,
+        api_url=api_url,
+        mode=mode,
+        parent_session=parent_session,
+        allow_incomplete=allow_incomplete,
+        timeout_seconds=timeout_seconds,
+    )
 
 
-def query_content(content: str, api_url: str | None = None) -> IsabelleResponse:
+def query_content(
+    content: str,
+    api_url: str | None = None,
+    *,
+    mode: Mode = "build",
+    parent_session: str = DEFAULT_PARENT_SESSION,
+    allow_incomplete: bool = False,
+    timeout_seconds: int = 300,
+) -> IsabelleResponse:
+    """Validate a complete .thy file against the DeepIsaHOL server.
+
+    ``mode="build"`` (default): run ``isabelle build`` against the prebuilt
+    ``Benchmark`` heap. Honours ``imports``, returns real error locations, and
+    -- unless ``allow_incomplete`` -- reports ``verified=False`` when the proof
+    still contains ``sorry``/``oops``. Slower (~20-45s).
+
+    ``mode="verify"``: REPL fast path. Ignores ``imports`` (runs on ``Main``) and
+    returns the final proof state. Seconds. Used by the web backend.
+    """
     api_url = _resolve_api_url(api_url)
     _verify_server_is_running(api_url)
-    payload = IsabelleRequest(thy_content=content)
+    if mode == "verify":
+        return _run_verify(content, api_url, timeout_seconds)
+    return _run_build(
+        content, api_url, parent_session, allow_incomplete, timeout_seconds
+    )
 
-    with httpx.Client(timeout=payload.timeout_seconds + 30) as client:
+
+def _run_verify(content: str, api_url: str, timeout_seconds: int) -> IsabelleResponse:
+    payload = IsabelleRequest(thy_content=content, timeout_seconds=timeout_seconds)
+    with httpx.Client(timeout=timeout_seconds + 30) as client:
         raw_response = client.post(
             f"{api_url.rstrip('/')}/verify",
             json=payload.model_dump(mode="json"),
         )
         raw_response.raise_for_status()
 
-    return IsabelleResponse.model_validate(raw_response.json())
+    data = raw_response.json()
+    return IsabelleResponse(
+        success=bool(data.get("success")),
+        verified=bool(data.get("verified")),
+        errors=list(data.get("errors") or []),
+        state=data.get("state"),
+        message=data.get("message", ""),
+        mode="verify",
+    )
+
+
+def _run_build(
+    content: str,
+    api_url: str,
+    parent_session: str,
+    allow_incomplete: bool,
+    timeout_seconds: int,
+) -> IsabelleResponse:
+    theory_name = _extract_theory_name(content)
+    session_name = f"Sub_{uuid4().hex[:12]}"
+    payload = {
+        "session_name": session_name,
+        "root_content": _make_root(session_name, parent_session, theory_name),
+        "theory_files": {f"{theory_name}.thy": content},
+        "timeout_seconds": max(1, min(timeout_seconds, 7200)),
+    }
+    with httpx.Client(timeout=timeout_seconds + 60) as client:
+        raw_response = client.post(f"{api_url.rstrip('/')}/build", json=payload)
+        raw_response.raise_for_status()
+
+    data = raw_response.json()
+    built = bool(data.get("built"))
+    structured = list(data.get("errors") or [])
+    errors = [_format_build_error(e) for e in structured]
+    build_log = data.get("build_log")
+
+    incomplete = _incomplete_commands(content)
+    if not incomplete and build_log and _UNSOUND_COMMAND.search(build_log):
+        incomplete = ["sorry"]
+
+    verified = built and (allow_incomplete or not incomplete)
+    if built and incomplete and not allow_incomplete:
+        errors.append(
+            "Build succeeded but the proof is incomplete "
+            f"({', '.join(incomplete)} present)."
+        )
+        message = f"Proof incomplete: {', '.join(incomplete)}"
+    else:
+        message = data.get("message") or (
+            "Build succeeded" if built else "Build failed"
+        )
+
+    return IsabelleResponse(
+        success=bool(data.get("success")),
+        verified=verified,
+        errors=errors,
+        state=None,
+        message=message,
+        mode="build",
+        build_log=build_log,
+        errors_structured=structured,
+    )

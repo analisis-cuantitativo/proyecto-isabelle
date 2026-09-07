@@ -83,7 +83,10 @@ def populate_proposed_thy_for_exercise(exercise: Exercise) -> Exercise:
             )
         )
 
-        isabelle_result = query_content(thy_content)
+        # A statement skeleton is expected to keep `sorry` as its proof
+        # placeholder, so `allow_incomplete=True` accepts it as long as it
+        # parses and type-checks (against the Benchmark heap, imports honoured).
+        isabelle_result = query_content(thy_content, allow_incomplete=True)
 
         if not isabelle_result.verified:
             console.print(

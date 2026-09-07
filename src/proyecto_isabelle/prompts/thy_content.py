@@ -12,11 +12,27 @@ well-typed.
 ## Instructions
 
 1. Create a complete, self-contained Isabelle theory file (.thy)
-2. The theory should import "Main" (or other appropriate libraries if needed)
+2. Import "Main", plus any of the libraries listed below that the statement needs
 3. Formalize the mathematical statement as a lemma or theorem
 4. Use `sorry` as the proof placeholder — do NOT attempt an actual proof
 5. Include any necessary auxiliary definitions (e.g., `definition`, `fun`) if the statement requires them
 6. Ensure the statement is syntactically valid and well-typed so Isabelle accepts it
+
+## Available libraries
+
+The theory is loaded against a heap that has the Isabelle distribution libraries
+prebuilt, so `imports` are honoured with no build wait. `imports Main` alone is
+fine; add any of these if the statement refers to their concepts:
+
+- `Complex_Main` — real & complex numbers, limits, series, derivatives
+- `"HOL-Analysis.Analysis"` — topology, measure theory, integration, complex analysis
+- `"HOL-Probability.Probability"` — probability spaces, PMFs, expectation, independence
+- `"HOL-Number_Theory.Number_Theory"` — congruences, totient, quadratic reciprocity
+- `"HOL-Computational_Algebra.Computational_Algebra"` — polynomials, primes, factorization
+- `"HOL-Algebra.Algebra"` — groups, rings, fields, ideals (locale/record based)
+- `"HOL-Combinatorics.Combinatorics"` — permutations, cycles, Stirling numbers
+- `"HOL-Cardinals.Cardinals"` — ordinals and cardinal arithmetic
+- individual `"HOL-Library.*"` theories (e.g. `Multiset`, `FSet`, `Extended_Real`)
 
 ## Output Format
 
