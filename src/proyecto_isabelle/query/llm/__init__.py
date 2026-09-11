@@ -33,6 +33,7 @@ Model name conventions (provider/model-name):
     - LM Studio: lm-studio/local-model
 """
 
+from . import batch
 from .client import LLMClient, ask, complete, get_client
 from .config import LLMConfig, get_config
 from .exceptions import LLMConfigError, LLMError, LLMProviderError
@@ -44,6 +45,8 @@ __all__ = [
     "ask",
     "complete",
     "get_client",
+    # Batches (Anthropic only)
+    "batch",
     # Config
     "LLMConfig",
     "get_config",

@@ -11,6 +11,37 @@ from .models import LLMResponse, Message, TokenUsage
 Provider = Literal["anthropic", "openai", "lm-studio", "ollama"]
 
 
+def _response_from_anthropic_message(message: "anthropic.types.Message") -> LLMResponse:
+    """Build an LLMResponse from an Anthropic ``Message``.
+
+    Shared by the synchronous ``client.messages.create`` path and the
+    Message Batches results path, since a batch's succeeded result wraps
+    a ``Message`` of the same shape.
+    """
+    content_parts: list[str] = []
+    thinking_parts: list[str] = []
+
+    for block in message.content:
+        if block.type == "text":
+            content_parts.append(block.text)
+        elif block.type == "thinking":
+            thinking_parts.append(block.thinking)
+
+    usage = TokenUsage(
+        prompt_tokens=message.usage.input_tokens,
+        completion_tokens=message.usage.output_tokens,
+        total_tokens=message.usage.input_tokens + message.usage.output_tokens,
+    )
+
+    return LLMResponse(
+        success=True,
+        content="\n".join(content_parts) if content_parts else None,
+        thinking="\n".join(thinking_parts) if thinking_parts else None,
+        model=message.model,
+        usage=usage,
+    )
+
+
 class LLMClient:
     """Client for interacting with various LLM providers."""
 
@@ -34,6 +65,14 @@ class LLMClient:
                 timeout=self.config.llm_default_timeout,
             )
         return self._anthropic_client
+
+    def get_anthropic_client(self) -> anthropic.Anthropic:
+        """Public accessor for the underlying Anthropic client.
+
+        Used by the ``batch`` submodule, which needs the raw SDK client to
+        drive the Message Batches endpoints directly.
+        """
+        return self._get_anthropic_client()
 
     def _get_openai_client(self) -> openai.OpenAI:
         """Get or create the OpenAI client."""
@@ -130,30 +169,7 @@ class LLMClient:
                 kwargs["temperature"] = temperature
 
             response = client.messages.create(**kwargs)
-
-            # Extract content and thinking from response
-            content_parts: list[str] = []
-            thinking_parts: list[str] = []
-
-            for block in response.content:
-                if block.type == "text":
-                    content_parts.append(block.text)
-                elif block.type == "thinking":
-                    thinking_parts.append(block.thinking)
-
-            usage = TokenUsage(
-                prompt_tokens=response.usage.input_tokens,
-                completion_tokens=response.usage.output_tokens,
-                total_tokens=response.usage.input_tokens + response.usage.output_tokens,
-            )
-
-            return LLMResponse(
-                success=True,
-                content="\n".join(content_parts) if content_parts else None,
-                thinking="\n".join(thinking_parts) if thinking_parts else None,
-                model=response.model,
-                usage=usage,
-            )
+            return _response_from_anthropic_message(response)
 
         except anthropic.AuthenticationError as e:
             return LLMResponse(
