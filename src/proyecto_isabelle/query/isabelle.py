@@ -35,7 +35,7 @@ _ISABELLE_COMMENT = re.compile(r"\(\*.*?\*\)", re.DOTALL)
 
 def _resolve_api_url(api_url: str | None) -> str:
     if api_url is None:
-        api_url = os.getenv("ISABELLE_API_URL", "http://localhost:8000")
+        api_url = os.getenv("ISABELLE_API_URL", "http://localhost:8001")
     if "://" not in api_url:
         # Render's `fromService: ... property: hostport` resolves to a bare
         # "host:port" with no scheme; the private network is plain HTTP.
@@ -147,6 +147,12 @@ def _make_root(session_name: str, parent_session: str, theory_name: str) -> str:
         sessions_block = f"  sessions\n{listed}\n"
     return (
         f'session {session_name} = "{parent_session}" +\n'
+        # `isabelle build` defaults quick_and_dirty=false, which makes `sorry` /
+        # `oops` a hard build error ("Cheating requires quick_and_dirty mode!").
+        # We allow them through here and gate on them in Python instead
+        # (`_incomplete_commands` + the `allow_incomplete` flag), so a skeleton
+        # with a `sorry` placeholder still gets its parse/type check.
+        f"  options [quick_and_dirty = true]\n"
         f"{sessions_block}"
         f"  theories\n"
         f"    {theory_name}\n"
