@@ -5,6 +5,7 @@ import type { Exercise, ReviewResponse } from '../types'
 
 const EXERCISE_CACHE_KEY = 'exercise_cache_v2'
 const PAGE_SIZE = 30
+const CACHE_TTL_MS = 15 * 60 * 1000 // 15 minutes
 
 function safeParseJSON<T>(value: string | null): T | null {
   if (!value) return null
@@ -53,7 +54,8 @@ export function useExercises() {
       const cached = safeParseJSON<CachedExercises>(
         localStorage.getItem(EXERCISE_CACHE_KEY)
       )
-      if (cached?.exercises?.length) {
+      const cacheIsFresh = !!cached && Date.now() - cached.saved_at < CACHE_TTL_MS
+      if (cacheIsFresh && cached && cached.exercises.length) {
         setExercises(cached.exercises)
         nextAfterIdRef.current = cached.next_after_id
         setHasMore(cached.next_after_id !== null)
