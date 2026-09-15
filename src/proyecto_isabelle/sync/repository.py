@@ -1,14 +1,13 @@
 import os
 from dataclasses import dataclass
 from enum import Enum
+from uuid import uuid4
 
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-from proyecto_isabelle.sync.models import Exercise, Source
-from proyecto_isabelle.query.llm.models import LLMResponse
-from proyecto_isabelle.query.isabelle import IsabelleResponse
-from proyecto_isabelle.util.saving import to_benchmark
+from proyecto_isabelle.sync.models import Benchmark, Exercise, Source
+from proyecto_isabelle.query.proof_agent import IsabelleCheck
 
 load_dotenv()
 
@@ -125,23 +124,56 @@ class SupabaseRepository:
         )
         return insert_resp.data[0]["id"]
 
-    def save_online(
+    def save_benchmark(
         self,
         exercise: Exercise,
-        llm_response: LLMResponse,
-        isabelle_response: IsabelleResponse,
-        prompt: str | None,
-        thy_response: str | None,
+        checks: list[IsabelleCheck],
+        model_name: str,
+        max_num_of_passes: int,
+        tokens_consumed: int = 0,
+        hit_retry_budget: bool = False,
     ) -> None:
-        benchmark = to_benchmark(
-            exercise=exercise,
-            llm_response=llm_response,
-            isabelle_response=isabelle_response,
-            prompt=prompt,
-            thy_response=thy_response,
+        """Persist one proof-agent run as one `benchmark` row per pass.
+
+        All rows share a fresh ``run_id``; the row with the highest
+        ``pass_number`` is the run's final answer (by convention, callers
+        should make that the independently-reverified attempt, not just the
+        model's last self-reported check). Works the same whether the run
+        finished normally or was cut short by ``ProofBudgetExceeded`` — pass
+        that exception's ``.checks`` and ``hit_retry_budget=True``.
+        """
+        if exercise.id is None:
+            raise ValueError("Exercise needs an id to be turned into Benchmark rows.")
+        if not checks:
+            raise ValueError(
+                "No checks to persist — the run never called check_in_isabelle."
+            )
+
+        run_id = uuid4()
+        was_given_correct = (
+            exercise.corrected_thy_code is not None
+            and exercise.statement == exercise.corrected_thy_code
         )
+
+        rows = [
+            Benchmark(
+                run_id=run_id,
+                pass_number=i,
+                exercise_id=exercise.id,
+                model_name=model_name,
+                was_given_the_correct_thy_statement=was_given_correct,
+                thy_content=check.thy_content,
+                verified=check.verified,
+                errors=check.errors,
+                max_num_of_passes=max_num_of_passes,
+                hit_retry_budget=hit_retry_budget,
+                tokens_consumed=tokens_consumed,
+            )
+            for i, check in enumerate(checks, start=1)
+        ]
+
         self.client.table("benchmark").insert(
-            benchmark.model_dump(mode="json")
+            [row.model_dump(mode="json") for row in rows]
         ).execute()
 
     def _sync_link_table(
@@ -213,7 +245,7 @@ class SupabaseRepository:
         query = self.client.table("exercise_full").select("*")
 
         if iterated_ids:
-            query = query.not_("id", "in", iterated_ids)
+            query = query.not_.in_("id", iterated_ids)
 
         response = query.execute()
 

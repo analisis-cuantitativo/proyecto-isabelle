@@ -2,9 +2,6 @@ import logging
 
 from proyecto_isabelle.query.isabelle import query_content, IsabelleResponse
 from proyecto_isabelle.query.llm import ask, LLMResponse
-from proyecto_isabelle.util import save_proof
-from proyecto_isabelle.sync.models import Exercise
-from proyecto_isabelle.sync.repository import SupabaseRepository
 from proyecto_isabelle.prompts import extract_thy_content
 
 logger = logging.getLogger(__name__)
@@ -59,31 +56,3 @@ def run_agent(
         logger.error("Isabelle errors: %s", result.errors)
 
     return response, result
-
-
-def save_proof_result(
-    exercise: Exercise,
-    agents_response: tuple[LLMResponse, IsabelleResponse],
-    prompt: str,
-) -> None:
-    repo = SupabaseRepository()
-
-    llm_response, isabelle_response = agents_response
-    thy = extract_thy_content(llm_response.content or "")
-
-    # Save the proof
-    save_proof(
-        exercise=exercise,
-        llm_response=llm_response,
-        isabelle_response=isabelle_response,
-        prompt=prompt,
-        thy_response=thy,
-    )
-
-    repo.save_online(
-        exercise=exercise,
-        llm_response=llm_response,
-        isabelle_response=isabelle_response,
-        prompt=prompt,
-        thy_response=thy,
-    )

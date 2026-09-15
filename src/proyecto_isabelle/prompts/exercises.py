@@ -51,6 +51,27 @@ We recommend you use e.g. `<Rightarrow>` or `<longleftrightarrow>` or `<exists>`
 {exercise}
 """
 
+PROMPT_FOR_EXERCISES_WITH_PROOF = (
+    PROMPT_FOR_EXERCISES
+    + """
+
+## Proof of that statement in natural language
+
+{proof}
+"""
+)
+
+PROMPT_FOR_EXERCISES_WITH_PROOF_AND_ERRORS = (
+    PROMPT_FOR_EXERCISES_WITH_PROOF
+    + """
+
+## Previous attempts:
+
+{previous_attempts}
+
+"""
+)
+
 
 def extract_thy_content(response: str) -> str | None:
     """Extract the .thy file content from an LLM response.

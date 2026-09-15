@@ -1,6 +1,5 @@
-from typing import Any
-
 from datetime import datetime, timezone
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -31,7 +30,22 @@ class Exercise(BaseModel):
 
 
 class Benchmark(BaseModel):
-    """Contains the information about one agent being tested on one exercise."""
+    """One pass (one `check_in_isabelle` call) within a proof-agent run.
+
+    A single run against one exercise produces one row per pass, all sharing
+    the same ``run_id``; the row with the highest ``pass_number`` is the
+    run's final, independently-reverified answer. This trades the old
+    "one row per run, with list-of-passes columns" shape for one row per
+    pass, so per-pass data (did *this* attempt verify, what errors did *it*
+    get) is queryable/filterable directly instead of living in parallel
+    arrays that have to be unpacked and zipped back together by index.
+    """
+
+    run_id: UUID
+    """Shared by every pass of the same exercise+model attempt."""
+
+    pass_number: int
+    """1-indexed position of this pass within its run."""
 
     exercise_id: int
     """The ID of the exercise."""
@@ -40,36 +54,31 @@ class Benchmark(BaseModel):
     """The model's name."""
 
     was_given_the_correct_thy_statement: bool
-    """Whether the model was given the human-verified .thy statement"""
+    """Whether the model was given the human-verified .thy statement.
 
-    thy_results: list[str]
-    """
-    The proposals by the model, which is a list whose elements
-    are the different passes in order.
+    A run-level fact (the prompt is the same for every pass), duplicated
+    across the run's rows.
     """
 
-    thoughts: list[str | None]
-    """The chain of thoughts, if any, for each pass."""
+    thy_content: str
+    """The model's proposed .thy content for this pass."""
+
+    verified: bool
+    """Whether this specific pass verified in Isabelle."""
+
+    errors: list[str]
+    """Isabelle's errors for this pass, if any."""
+
+    max_num_of_passes: int
+    """The maximum number of passes the model was allowed for this run."""
+
+    hit_retry_budget: bool = False
+    """Whether the run stopped because it exhausted its retry budget,
+    rather than the model voluntarily submitting a final answer."""
 
     tokens_consumed: int
-    """The number of tokens consumed by the model."""
-
-    num_of_passes: int
-    """How many attempts were given to the model.
-
-    For this benchmark, we give the model the errors
-    that Isabelle raises up to `n` times, where `n`
-    is defined by the field `max_num_of_passes`.
-    """
-
-    max_num_of_passes: int = 3
-    """The maximum number of attempts the model gets."""
-
-    correctly_verified: bool
-    """Whether the model correctly verified the proof."""
-
-    deepisahol_metadata: list[dict[str, Any]]
-    """The DeepIsaHOL metadata for each pass."""
+    """Total tokens consumed by the whole run (a run-level fact, duplicated
+    across the run's rows, not a per-pass count)."""
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
     """When the row was created."""
