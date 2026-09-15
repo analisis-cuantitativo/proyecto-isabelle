@@ -116,6 +116,14 @@ def _prove_and_save_one(
                     border_style="red",
                 )
             )
+            if not e.checks:
+                # The model never called check_in_isabelle even once before
+                # its retries ran out — there's nothing to persist.
+                console.print(
+                    f"[yellow]{exercise_name}: no Isabelle checks were made, "
+                    "nothing to save[/yellow]"
+                )
+                return False
             # Total tokens for a budget-exceeded run isn't available (the run
             # never returned), so it's recorded as 0 rather than guessed at.
             repo.save_benchmark(

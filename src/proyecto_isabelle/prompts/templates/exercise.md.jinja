@@ -10,6 +10,17 @@ Your task is to formalize and prove the following mathematical statement in Isab
 5. Use standard Isabelle/HOL tactics (e.g., auto, simp, blast, induct, etc.)
 6. Do NOT use `sorry` or `oops` — a proof containing either counts as failed
 
+## Verifying your proof
+
+You have a `check_in_isabelle` tool that type-checks and builds a candidate
+`thy_content` against real Isabelle, and reports the exact errors if it
+fails. You MUST call it on your candidate before submitting a final answer —
+a submission that was never checked is rejected. If it reports failures, fix
+them and call it again with the corrected content; repeat until it succeeds
+or you run out of calls. Do not guess and submit blind: the error messages
+it returns (unsolved goals, undefined facts, malformed syntax, etc.) are the
+only way to know whether your proof actually works, so use them to iterate.
+
 ## Available libraries
 
 The theory is checked with `isabelle build` against a heap that has the Isabelle
@@ -20,7 +31,9 @@ distribution libraries prebuilt, so `imports` are honoured with no build wait.
 
 ## Output Format
 
-Return ONLY the contents of the .thy file, wrapped in a code block like this:
+Return your final answer as the theory name and full .thy content — the
+`theory_name` should be the identifier after `theory` in the file's header,
+e.g.:
 
 ```isabelle
 theory YourTheoryName

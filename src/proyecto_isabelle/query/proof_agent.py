@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, ModelRetry, RunContext, UsageLimits
-from pydantic_ai.exceptions import UsageLimitExceeded
+from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
@@ -59,15 +59,17 @@ class ProofResult:
 
 
 class ProofBudgetExceeded(Exception):
-    """Raised when the agent used its full request budget without settling
-    on a final answer. Carries whatever ``check_in_isabelle`` calls happened
-    before that, so callers can still inspect the last attempts made."""
+    """Raised when the agent run ended without settling on a final answer —
+    either it used its full request budget, or it exhausted its output
+    retries (e.g. repeatedly ignoring an output validator). Carries whatever
+    ``check_in_isabelle`` calls happened before that, so callers can still
+    inspect the last attempts made."""
 
     def __init__(self, checks: list[IsabelleCheck]):
         self.checks = checks
         super().__init__(
-            f"Exceeded the request budget after {len(checks)} Isabelle "
-            "check(s); no final answer was produced."
+            f"Run ended after {len(checks)} Isabelle check(s) without "
+            "producing a final answer."
         )
 
 
@@ -172,6 +174,26 @@ def build_proof_agent(
             )
         return output
 
+    @agent.output_validator
+    def _must_have_checked(
+        ctx: RunContext[ProofDeps], output: ProofAttempt
+    ) -> ProofAttempt:
+        """Reject a final answer the model never ran through Isabelle.
+
+        Without this, the model can (and often does) skip the tool entirely
+        and submit a first-draft guess — the only feedback it ever gets is
+        then the caller's independent re-verification, after the run is
+        already over. This forces at least one real check_in_isabelle round
+        trip per run, so the model always sees genuine Isabelle errors (and
+        a chance to fix them) before finalizing.
+        """
+        if not ctx.deps.checks:
+            raise ModelRetry(
+                "You haven't called check_in_isabelle yet. Call it on this "
+                "thy_content before submitting a final answer."
+            )
+        return output
+
     return agent
 
 
@@ -198,6 +220,13 @@ async def prove_exercise(
       in case the model ignores the soft cap. Raises ``ProofBudgetExceeded``
       (with whatever checks happened) if hit before a final answer.
 
+    A third, output-level guard (an ``output_validator``) rejects any final
+    answer the model hasn't run through ``check_in_isabelle`` at least once,
+    forcing a real verification round trip every run. If the model keeps
+    ignoring that (or the sorry/oops check) past ``output_retries``,
+    pydantic_ai raises ``UnexpectedModelBehavior``, which is also folded into
+    ``ProofBudgetExceeded`` here.
+
     Every ``check_in_isabelle`` call is recorded in the returned
     ``ProofResult.checks``, regardless of which cap ends the run.
     """
@@ -221,9 +250,9 @@ async def prove_exercise(
         result = await agent.run(
             "Formalize and prove the exercise.", deps=deps, usage_limits=usage_limits
         )
-    except UsageLimitExceeded as e:
+    except (UsageLimitExceeded, UnexpectedModelBehavior) as e:
         logger.warning(
-            "Proof agent hit its request budget after %d Isabelle check(s): %s",
+            "Proof agent aborted after %d Isabelle check(s): %s",
             len(deps.checks),
             e,
         )
