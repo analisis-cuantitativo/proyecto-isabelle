@@ -123,7 +123,7 @@ def _incomplete_commands(thy_content: str) -> list[str]:
     )
 
 
-def _extract_theory_name(thy_content: str) -> str:
+def extract_theory_name(thy_content: str) -> str:
     match = _THEORY_HEADER.search(_strip_comments(thy_content))
     if not match:
         raise ValueError(
@@ -247,7 +247,7 @@ def _run_build(
     timeout_seconds: int,
     build_options: list[str] | None = None,
 ) -> IsabelleResponse:
-    theory_name = _extract_theory_name(content)
+    theory_name = extract_theory_name(content)
     session_name = f"Sub_{uuid4().hex[:12]}"
     payload = {
         "session_name": session_name,

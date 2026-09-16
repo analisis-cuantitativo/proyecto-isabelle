@@ -18,7 +18,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 
 from proyecto_isabelle.parse import thy
-from proyecto_isabelle.query.isabelle import query_content
+from proyecto_isabelle.query.isabelle import extract_theory_name, query_content
 from proyecto_isabelle.query.proof_agent import (
     DEFAULT_MODEL,
     IsabelleCheck,
@@ -106,7 +106,12 @@ def _prove_and_save_one(
     servers then reject outright as an invalid message — so retrying within
     the same run can't help; only starting over with clean history can. A
     budget-exceeded run that made at least one real check isn't retried:
-    that's genuine exhaustion after real progress, not a fluke.
+    that's genuine exhaustion after real progress, not a fluke — the one
+    exception being a run whose *last* check_in_isabelle call verified right
+    before the abort (e.g. the same "provider rejects the next request"
+    failure hitting right after success instead of before it): that content
+    is recovered as the run's final attempt rather than discarded, since
+    Isabelle already accepted it.
 
     Never raises for expected failure modes (budget exhausted, verification
     failed): those are reported to the console and folded into the return
@@ -181,6 +186,32 @@ def _prove_and_save_one(
                         border_style="red",
                     )
                 )
+                if e.checks and e.checks[-1].verified:
+                    # The run died (e.g. a provider-side 400) right after
+                    # the model's last check_in_isabelle call came back
+                    # verified — in practice that's the model one step from
+                    # submitting that exact content as its final answer.
+                    # Recover it as the run's attempt instead of discarding
+                    # a proof Isabelle already accepted; it still goes
+                    # through the independent re-verification below rather
+                    # than trusting the agent's self-report.
+                    console.print(
+                        f"[yellow]{exercise_name}: run aborted right after "
+                        "a verified check_in_isabelle call — recovering it "
+                        "as the final attempt[/yellow]"
+                    )
+                    last_check = e.checks[-1]
+                    proof_result = ProofResult(
+                        attempt=ProofAttempt(
+                            theory_name=extract_theory_name(last_check.thy_content),
+                            thy_content=last_check.thy_content,
+                        ),
+                        checks=e.checks,
+                        request_count=len(e.checks),
+                        total_tokens=last_check.tokens_consumed,
+                        max_isabelle_checks=max_isabelle_checks,
+                    )
+                    break
                 writer.log_finished(verified=False, hit_retry_budget=True)
                 if not e.checks:
                     # The model never called check_in_isabelle even once —
