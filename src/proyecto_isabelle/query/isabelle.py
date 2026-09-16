@@ -167,6 +167,7 @@ def query_file(
     parent_session: str = DEFAULT_PARENT_SESSION,
     allow_incomplete: bool = False,
     timeout_seconds: int = 300,
+    build_options: list[str] | None = None,
 ) -> IsabelleResponse:
     content = thy.load_text(path)
     return query_content(
@@ -176,6 +177,7 @@ def query_file(
         parent_session=parent_session,
         allow_incomplete=allow_incomplete,
         timeout_seconds=timeout_seconds,
+        build_options=build_options,
     )
 
 
@@ -187,6 +189,7 @@ def query_content(
     parent_session: str = DEFAULT_PARENT_SESSION,
     allow_incomplete: bool = False,
     timeout_seconds: int = 300,
+    build_options: list[str] | None = None,
 ) -> IsabelleResponse:
     """Validate a complete .thy file against the DeepIsaHOL server.
 
@@ -197,13 +200,22 @@ def query_content(
 
     ``mode="verify"``: REPL fast path. Ignores ``imports`` (runs on ``Main``) and
     returns the final proof state. Seconds. Used by the web backend.
+
+    ``build_options`` (build mode only): extra ``isabelle build`` flags, e.g.
+    ``["-v"]`` to get command-level output (such as ``find_theorems`` results)
+    back in ``build_log`` — see ``DeepIsaHOL``'s ``ALLOWED_BUILD_OPTIONS``.
     """
     api_url = _resolve_api_url(api_url)
     _verify_server_is_running(api_url)
     if mode == "verify":
         return _run_verify(content, api_url, timeout_seconds)
     return _run_build(
-        content, api_url, parent_session, allow_incomplete, timeout_seconds
+        content,
+        api_url,
+        parent_session,
+        allow_incomplete,
+        timeout_seconds,
+        build_options,
     )
 
 
@@ -233,6 +245,7 @@ def _run_build(
     parent_session: str,
     allow_incomplete: bool,
     timeout_seconds: int,
+    build_options: list[str] | None = None,
 ) -> IsabelleResponse:
     theory_name = _extract_theory_name(content)
     session_name = f"Sub_{uuid4().hex[:12]}"
@@ -241,6 +254,7 @@ def _run_build(
         "root_content": _make_root(session_name, parent_session, theory_name),
         "theory_files": {f"{theory_name}.thy": content},
         "timeout_seconds": max(1, min(timeout_seconds, 7200)),
+        "options": build_options,
     }
     with httpx.Client(timeout=timeout_seconds + 60) as client:
         raw_response = client.post(f"{api_url.rstrip('/')}/build", json=payload)

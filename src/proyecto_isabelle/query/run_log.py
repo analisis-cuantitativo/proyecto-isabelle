@@ -58,6 +58,7 @@ class RunLogWriter:
         max_isabelle_checks: int,
         exercise_statement: str | None = None,
         proof: str | None = None,
+        max_isabelle_queries: int | None = None,
     ) -> None:
         self.log_event(
             {
@@ -65,6 +66,7 @@ class RunLogWriter:
                 "exercise_name": exercise_name,
                 "model_name": model_name,
                 "max_isabelle_checks": max_isabelle_checks,
+                "max_isabelle_queries": max_isabelle_queries,
                 "exercise_statement": exercise_statement,
                 "proof": proof,
             }

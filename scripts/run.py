@@ -22,6 +22,7 @@ from proyecto_isabelle.query.isabelle import query_content
 from proyecto_isabelle.query.proof_agent import (
     DEFAULT_MODEL,
     IsabelleCheck,
+    IsabelleQuery,
     ProofAttempt,
     ProofBudgetExceeded,
     ProofResult,
@@ -54,6 +55,7 @@ def _load_cached_result(cache_path: Path) -> ProofResult | None:
         request_count=data["request_count"],
         total_tokens=data["total_tokens"],
         max_isabelle_checks=data["max_isabelle_checks"],
+        queries=[IsabelleQuery.model_validate(q) for q in data.get("queries", [])],
     )
 
 
@@ -67,6 +69,7 @@ def _save_cached_result(cache_path: Path, result: ProofResult) -> None:
                 "request_count": result.request_count,
                 "total_tokens": result.total_tokens,
                 "max_isabelle_checks": result.max_isabelle_checks,
+                "queries": [q.model_dump(mode="json") for q in result.queries],
             },
             indent=2,
         )
@@ -83,6 +86,7 @@ def _prove_and_save_one(
     use_cache: bool,
     build_timeout_seconds: int,
     max_empty_response_retries: int = 2,
+    max_isabelle_queries: int = 5,
 ) -> bool:
     """Prove one exercise, persist a `benchmark` row per pass, and — if it
     verifies — save the .thy file to disk. Returns whether it verified.
@@ -148,6 +152,7 @@ def _prove_and_save_one(
                 max_isabelle_checks,
                 exercise_statement=exercise.statement,
                 proof=exercise.proof if with_proof else None,
+                max_isabelle_queries=max_isabelle_queries,
             )
             try:
                 proof_result = asyncio.run(
@@ -161,6 +166,7 @@ def _prove_and_save_one(
                         ),
                         model_name=model_name,
                         max_isabelle_checks=max_isabelle_checks,
+                        max_isabelle_queries=max_isabelle_queries,
                         run_logger=writer,
                         build_timeout_seconds=build_timeout_seconds,
                         on_check=on_check,
@@ -205,6 +211,7 @@ def _prove_and_save_one(
 
     console.print(
         f"[dim]{exercise_name}: {len(proof_result.checks)} Isabelle check(s), "
+        f"{len(proof_result.queries)} Isabelle query call(s), "
         f"{proof_result.request_count} model request(s)[/dim]"
     )
     attempt = proof_result.attempt
@@ -284,6 +291,14 @@ def run(
     max_isabelle_checks: int = typer.Option(
         5, help="Max check_in_isabelle calls the agent may make before it must submit."
     ),
+    max_isabelle_queries: int = typer.Option(
+        5,
+        help=(
+            "Max query_isabelle calls (library/system lookups, not proof "
+            "attempts) the agent may make; a separate budget from "
+            "max_isabelle_checks."
+        ),
+    ),
     use_cache: bool = typer.Option(
         True,
         help=(
@@ -330,6 +345,7 @@ def run(
         use_cache,
         build_timeout_seconds,
         max_empty_response_retries,
+        max_isabelle_queries,
     )
     if not verified:
         raise typer.Exit(code=1)
@@ -350,6 +366,14 @@ def run_all(
     ),
     max_isabelle_checks: int = typer.Option(
         5, help="Max check_in_isabelle calls the agent may make before it must submit."
+    ),
+    max_isabelle_queries: int = typer.Option(
+        5,
+        help=(
+            "Max query_isabelle calls (library/system lookups, not proof "
+            "attempts) the agent may make; a separate budget from "
+            "max_isabelle_checks."
+        ),
     ),
     use_cache: bool = typer.Option(
         True, help="Reuse a cached agent result per exercise+model when available."
@@ -422,6 +446,7 @@ def run_all(
                 use_cache,
                 build_timeout_seconds,
                 max_empty_response_retries,
+                max_isabelle_queries,
             )
         except Exception as e:
             console.print(

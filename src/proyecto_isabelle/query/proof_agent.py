@@ -7,6 +7,11 @@ before returning a structured ``ProofAttempt``. ``output_validator`` rejects
 (and triggers an automatic retry on) any answer that still contains
 ``sorry``/``oops``.
 
+The model also gets a separate ``query_isabelle`` tool for system/library
+lookups (``find_theorems``, checking an import resolves, etc.) that aren't
+proof attempts — see its docstring below for why that's a distinct tool
+rather than just more ``check_in_isabelle`` calls.
+
 This only covers the synchronous, single-exercise path. Batch processing
 (``query/llm/batch.py``) uses Anthropic's Message Batches API directly, which
 ``pydantic_ai`` doesn't wrap, so it stays as-is.
@@ -111,6 +116,19 @@ class IsabelleCheck(BaseModel):
     updates after each model response — not a per-pass delta."""
 
 
+class IsabelleQuery(BaseModel):
+    """A single ``query_isabelle`` call the agent made during one run.
+
+    Unlike ``IsabelleCheck``, this isn't a proof attempt: it doesn't verify
+    anything and never gets persisted as a benchmark pass — it's just a
+    library/system lookup, kept here for observability (run logs, caches).
+    """
+
+    thy_content: str
+    output: str
+    tokens_consumed: int = 0
+
+
 @dataclass
 class ProofResult:
     """Everything a caller needs: the final attempt, plus the retry trail."""
@@ -120,6 +138,7 @@ class ProofResult:
     request_count: int
     total_tokens: int
     max_isabelle_checks: int
+    queries: list[IsabelleQuery] = field(default_factory=list)
 
 
 class ProofBudgetExceeded(Exception):
@@ -144,8 +163,10 @@ class ProofDeps:
     proposed_thy_code: str | None = None
     previous_attempts: list[PreviousAttempt] = field(default_factory=list)
     max_isabelle_checks: int = 5
+    max_isabelle_queries: int = 5
     build_timeout_seconds: int = 300
     checks: list[IsabelleCheck] = field(default_factory=list)
+    queries: list[IsabelleQuery] = field(default_factory=list)
     on_check: Callable[[IsabelleCheck], None] | None = None
     """Fired synchronously right after each real ``check_in_isabelle`` call is
     recorded, so a caller can persist it immediately rather than waiting for
@@ -165,9 +186,10 @@ def build_proof_agent(
 
     ``output_retries`` bounds how many times the ``sorry``/``oops``
     output-validator check below can send the model back for another attempt.
-    It does NOT bound how many times the model calls ``check_in_isabelle``
-    (that tool never raises ``ModelRetry``) — see ``ProofDeps.max_isabelle_checks``
-    and ``prove_exercise``'s ``max_requests`` for that.
+    It does NOT bound how many times the model calls ``check_in_isabelle`` or
+    ``query_isabelle`` (neither tool ever raises ``ModelRetry``) — see
+    ``ProofDeps.max_isabelle_checks``/``max_isabelle_queries`` and
+    ``prove_exercise``'s ``max_requests`` for that.
 
     A fresh instance per call keeps these settings configurable per run
     without module-level mutable state.
@@ -208,9 +230,15 @@ def build_proof_agent(
     def check_in_isabelle(ctx: RunContext[ProofDeps], thy_content: str) -> str:
         """Type-check and run ``thy_content`` against Isabelle; reports errors, if any.
 
-        Call this before returning a final answer. If it reports failures,
-        fix them and call it again with the corrected content. There is a
-        limited number of calls available for this exercise.
+        This is for verifying a candidate proof attempt — ``thy_content``
+        should be your best shot at a complete formalization, not a
+        scratch/exploratory theory. Call this before returning a final
+        answer; if it reports failures, fix them and call it again with the
+        corrected content. There is a limited number of calls available for
+        this exercise. To look something up instead (does this lemma exist,
+        what does `find_theorems` return, does this import resolve), use
+        ``query_isabelle`` — it has its own, separate budget, and won't burn
+        through this one.
         """
         if len(ctx.deps.checks) >= ctx.deps.max_isabelle_checks:
             return (
@@ -236,6 +264,52 @@ def build_proof_agent(
         if result.verified:
             return "OK: the proof builds and contains no sorry/oops."
         return f"FAILED: {'; '.join(result.errors) or result.message}"
+
+    @agent.tool
+    def query_isabelle(ctx: RunContext[ProofDeps], thy_content: str) -> str:
+        """Run ``thy_content`` through Isabelle to look something up — e.g. a
+        `find_theorems`/`find_consts` probe, or checking that an import or a
+        fact name resolves — without it counting as a proof attempt.
+
+        Use this to explore the library or test an idea *before* committing
+        to a candidate proof; use ``check_in_isabelle`` to actually verify
+        one. ``thy_content`` doesn't need to be complete (`sorry`/`oops` are
+        fine here), and the reply is the raw build output, so you can see
+        what commands like `find_theorems` printed. This has its own,
+        separate, limited number of calls for this exercise — it does not
+        draw down your `check_in_isabelle` budget, but it isn't unlimited
+        either, so don't use it as a substitute for reasoning through the
+        problem.
+        """
+        if len(ctx.deps.queries) >= ctx.deps.max_isabelle_queries:
+            return (
+                f"Query budget exhausted ({ctx.deps.max_isabelle_queries} calls "
+                "used). Stop exploring and work with what you've already found."
+            )
+
+        result = query_content(
+            thy_content,
+            mode="build",
+            allow_incomplete=True,
+            timeout_seconds=ctx.deps.build_timeout_seconds,
+            build_options=["-v"],
+        )
+        output = result.build_log or "\n".join(result.errors) or result.message
+        max_output_chars = 8000
+        if len(output) > max_output_chars:
+            omitted = len(output) - max_output_chars
+            output = (
+                f"{output[:max_output_chars]}\n... [truncated {omitted} more chars]"
+            )
+
+        ctx.deps.queries.append(
+            IsabelleQuery(
+                thy_content=thy_content,
+                output=output,
+                tokens_consumed=ctx.usage.input_tokens + ctx.usage.output_tokens,
+            )
+        )
+        return output
 
     @agent.output_validator
     def _no_sorry_or_oops(
@@ -280,6 +354,7 @@ async def prove_exercise(
     model_name: str = DEFAULT_MODEL,
     thinking_budget: int | None = 4096,
     max_isabelle_checks: int = 5,
+    max_isabelle_queries: int = 5,
     output_retries: int = 3,
     max_requests: int | None = None,
     run_logger: RunLogWriter | None = None,
@@ -290,12 +365,16 @@ async def prove_exercise(
     together with the trail of Isabelle checks it made along the way.
 
     Two independent knobs bound the retry loop:
-    - ``max_isabelle_checks``: a soft cap. Once hit, ``check_in_isabelle``
-      stops calling Isabelle and just tells the model to submit its best
-      attempt — cheap, and gives the model a chance to wrap up gracefully.
-    - ``max_requests`` (default ``2 * max_isabelle_checks + output_retries + 2``):
+    - ``max_isabelle_checks``/``max_isabelle_queries``: soft caps. Once hit,
+      ``check_in_isabelle``/``query_isabelle`` respectively stop calling
+      Isabelle and just tell the model to wrap up — cheap, and gives the
+      model a chance to finish gracefully. They're independent budgets:
+      exploring the library via ``query_isabelle`` can't starve the model of
+      its ``check_in_isabelle`` calls, or vice versa.
+    - ``max_requests`` (default
+      ``2 * (max_isabelle_checks + max_isabelle_queries) + output_retries + 2``):
       a hard cap on total LLM requests in the run (``UsageLimits.request_limit``),
-      in case the model ignores the soft cap. Raises ``ProofBudgetExceeded``
+      in case the model ignores the soft caps. Raises ``ProofBudgetExceeded``
       (with whatever checks happened) if hit before a final answer.
     - ``build_timeout_seconds``: per-``check_in_isabelle`` call, how long the
       DeepIsaHOL server is allowed to spend on ``isabelle build`` before it
@@ -314,7 +393,10 @@ async def prove_exercise(
     silently.
 
     Every ``check_in_isabelle`` call is recorded in the returned
-    ``ProofResult.checks``, regardless of which cap ends the run.
+    ``ProofResult.checks``, regardless of which cap ends the run. Likewise
+    every ``query_isabelle`` call is recorded in ``ProofResult.queries`` — but
+    unlike ``checks``, that list is never persisted as a benchmark pass (it
+    isn't a proof attempt), and isn't required for the run to finish.
 
     If ``run_logger`` is given (already started by the caller, via
     ``RunLogWriter.log_started``), every node of the run (model thinking,
@@ -340,11 +422,13 @@ async def prove_exercise(
         proposed_thy_code=proposed_thy_code,
         previous_attempts=previous_attempts or [],
         max_isabelle_checks=max_isabelle_checks,
+        max_isabelle_queries=max_isabelle_queries,
         build_timeout_seconds=build_timeout_seconds,
         on_check=on_check,
     )
     usage_limits = UsageLimits(
-        request_limit=max_requests or (2 * max_isabelle_checks + output_retries + 2)
+        request_limit=max_requests
+        or (2 * (max_isabelle_checks + max_isabelle_queries) + output_retries + 2)
     )
 
     try:
@@ -378,4 +462,5 @@ async def prove_exercise(
         request_count=usage.requests,
         total_tokens=usage.input_tokens + usage.output_tokens,
         max_isabelle_checks=max_isabelle_checks,
+        queries=deps.queries,
     )
