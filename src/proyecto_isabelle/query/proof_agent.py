@@ -15,21 +15,81 @@ This only covers the synchronous, single-exercise path. Batch processing
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any, cast
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, ModelRetry, RunContext, UsageLimits
-from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
-from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
-from pydantic_ai.providers.anthropic import AnthropicProvider
+from pydantic_ai.exceptions import (
+    ModelAPIError,
+    UnexpectedModelBehavior,
+    UsageLimitExceeded,
+)
+from pydantic_ai.models import Model, infer_model
+from pydantic_ai.models.anthropic import AnthropicModelSettings
+from pydantic_ai.providers import Provider, infer_provider_class
+from pydantic_ai.settings import ModelSettings
 
 from proyecto_isabelle.prompts.render import PreviousAttempt, render_exercise_prompt
 from proyecto_isabelle.query.isabelle import query_content
-from proyecto_isabelle.query.llm.config import get_config
+from proyecto_isabelle.query.llm.config import LLMConfig, get_config
+from proyecto_isabelle.query.run_log import RunLogWriter
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "anthropic/claude-sonnet-4-5-20250929"
+DEFAULT_MODEL = "anthropic:claude-sonnet-4-5-20250929"
+
+# Which `LLMConfig` field holds the API key for each pydantic_ai provider
+# name (the part of a `Models` value before the `:`). Adding support for a
+# new provider is just one line here — `_build_model` below delegates
+# everything else (which Model/Provider class to use, how to talk to it) to
+# pydantic_ai's own `infer_model`/`infer_provider_class` registry.
+_PROVIDER_API_KEY_FIELDS: dict[str, str] = {
+    "anthropic": "anthropic_api_key",
+    "openai": "openai_api_key",
+    # Same OpenAI account/key as "openai" — just routes through the Responses
+    # API (pydantic_ai's OpenAIResponsesModel) instead of Chat Completions.
+    # Needed for model families (e.g. GPT-5.6 Terra/Luna) that 400 on
+    # function-tool requests over Chat Completions unless reasoning is
+    # disabled entirely; the Responses API supports tools + reasoning together.
+    "openai-responses": "openai_api_key",
+    "google-gla": "google_api_key",
+    "deepseek": "deepseek_api_key",
+    "moonshotai": "moonshotai_api_key",
+}
+
+
+def _build_model(model_name: str, config: LLMConfig) -> Model:
+    """Build a pydantic_ai ``Model`` from a ``"<provider>:<model>"`` string.
+
+    Delegates to pydantic_ai's ``infer_model``, which already knows how to
+    turn e.g. ``"deepseek:deepseek-chat"`` or ``"google-gla:gemini-3-1-pro"``
+    into the right ``Model``/``Provider`` pair — we only need to supply the
+    right API key, sourced from ``LLMConfig`` rather than the environment
+    (which is what pydantic_ai's default provider factory reads).
+    """
+    provider_name, sep, _ = model_name.partition(":")
+    if not sep or provider_name not in _PROVIDER_API_KEY_FIELDS:
+        known = ", ".join(sorted(_PROVIDER_API_KEY_FIELDS))
+        raise ValueError(
+            f"Don't know how to authenticate provider {provider_name!r} "
+            f"(from model {model_name!r}). Known providers: {known}. Add a "
+            "new entry to _PROVIDER_API_KEY_FIELDS (and an API key field on "
+            "LLMConfig) to support it."
+        )
+
+    api_key = getattr(config, _PROVIDER_API_KEY_FIELDS[provider_name])
+
+    def _provider_factory(name: str) -> Provider[Any]:
+        # Every provider class pydantic_ai ships accepts `api_key` as a
+        # keyword-only argument, but that's not expressible on the shared
+        # `Provider` base type, so this dynamic dispatch can't be statically
+        # checked.
+        provider_class = infer_provider_class(name)
+        return provider_class(api_key=api_key)  # pyright: ignore[reportCallIssue]
+
+    return infer_model(model_name, provider_factory=_provider_factory)
 
 
 class ProofAttempt(BaseModel):
@@ -45,6 +105,10 @@ class IsabelleCheck(BaseModel):
     thy_content: str
     verified: bool
     errors: list[str]
+    tokens_consumed: int = 0
+    """Cumulative input+output tokens through this pass (i.e. including every
+    prior pass in the same run), sourced from the live ``RunUsage`` pydantic_ai
+    updates after each model response — not a per-pass delta."""
 
 
 @dataclass
@@ -80,7 +144,12 @@ class ProofDeps:
     proposed_thy_code: str | None = None
     previous_attempts: list[PreviousAttempt] = field(default_factory=list)
     max_isabelle_checks: int = 5
+    build_timeout_seconds: int = 300
     checks: list[IsabelleCheck] = field(default_factory=list)
+    on_check: Callable[[IsabelleCheck], None] | None = None
+    """Fired synchronously right after each real ``check_in_isabelle`` call is
+    recorded, so a caller can persist it immediately rather than waiting for
+    the run to finish — see ``prove_exercise``'s ``on_check`` param."""
 
 
 def build_proof_agent(
@@ -90,8 +159,9 @@ def build_proof_agent(
 ) -> Agent[ProofDeps, ProofAttempt]:
     """Construct a fresh proof agent for the given model.
 
-    ``model_name`` follows this repo's ``"anthropic/<model>"`` convention
-    (see ``util.constants.MODELS``), not pydantic_ai's ``"anthropic:<model>"``.
+    ``model_name`` follows pydantic_ai's own ``"<provider>:<model>"``
+    convention (see ``util.constants.Models``) — e.g. ``"deepseek:deepseek-chat"``
+    or ``"google-gla:gemini-3-1-pro"``, not just Anthropic models.
 
     ``output_retries`` bounds how many times the ``sorry``/``oops``
     output-validator check below can send the model back for another attempt.
@@ -102,21 +172,20 @@ def build_proof_agent(
     A fresh instance per call keeps these settings configurable per run
     without module-level mutable state.
     """
-    config = get_config()
-    model = AnthropicModel(
-        model_name.removeprefix("anthropic/"),
-        provider=AnthropicProvider(api_key=config.anthropic_api_key),
-    )
+    model = _build_model(model_name, get_config())
 
-    settings: AnthropicModelSettings = {}
+    settings: ModelSettings = {}
     if thinking_budget is not None:
-        # Extended thinking requires temperature 1 (matches query/agent.py).
-        settings["anthropic_thinking"] = {
-            "type": "enabled",
-            "budget_tokens": thinking_budget,
-        }
         settings["max_tokens"] = thinking_budget * 4
         settings["temperature"] = 1.0
+        if model_name.startswith("anthropic:"):
+            # Extended thinking requires temperature 1 (matches query/agent.py).
+            # This setting is Anthropic-specific; other providers just get the
+            # max_tokens/temperature above.
+            cast(AnthropicModelSettings, settings)["anthropic_thinking"] = {
+                "type": "enabled",
+                "budget_tokens": thinking_budget,
+            }
 
     agent: Agent[ProofDeps, ProofAttempt] = Agent(
         model,
@@ -150,14 +219,20 @@ def build_proof_agent(
                 "final answer now, even if it still fails."
             )
 
-        result = query_content(thy_content, mode="build")
-        ctx.deps.checks.append(
-            IsabelleCheck(
-                thy_content=thy_content,
-                verified=result.verified,
-                errors=result.errors,
-            )
+        result = query_content(
+            thy_content,
+            mode="build",
+            timeout_seconds=ctx.deps.build_timeout_seconds,
         )
+        check = IsabelleCheck(
+            thy_content=thy_content,
+            verified=result.verified,
+            errors=result.errors,
+            tokens_consumed=ctx.usage.input_tokens + ctx.usage.output_tokens,
+        )
+        ctx.deps.checks.append(check)
+        if ctx.deps.on_check:
+            ctx.deps.on_check(check)
         if result.verified:
             return "OK: the proof builds and contains no sorry/oops."
         return f"FAILED: {'; '.join(result.errors) or result.message}"
@@ -207,6 +282,9 @@ async def prove_exercise(
     max_isabelle_checks: int = 5,
     output_retries: int = 3,
     max_requests: int | None = None,
+    run_logger: RunLogWriter | None = None,
+    build_timeout_seconds: int = 300,
+    on_check: Callable[[IsabelleCheck], None] | None = None,
 ) -> ProofResult:
     """Run the agent end-to-end and return its final, verified-or-not attempt
     together with the trail of Isabelle checks it made along the way.
@@ -219,16 +297,37 @@ async def prove_exercise(
       a hard cap on total LLM requests in the run (``UsageLimits.request_limit``),
       in case the model ignores the soft cap. Raises ``ProofBudgetExceeded``
       (with whatever checks happened) if hit before a final answer.
+    - ``build_timeout_seconds``: per-``check_in_isabelle`` call, how long the
+      DeepIsaHOL server is allowed to spend on ``isabelle build`` before it
+      reports "Build timed out". Heavier exercises (e.g. those pulling in
+      HOL-Analysis) can legitimately take longer than the 300s default.
 
     A third, output-level guard (an ``output_validator``) rejects any final
     answer the model hasn't run through ``check_in_isabelle`` at least once,
     forcing a real verification round trip every run. If the model keeps
     ignoring that (or the sorry/oops check) past ``output_retries``,
     pydantic_ai raises ``UnexpectedModelBehavior``, which is also folded into
-    ``ProofBudgetExceeded`` here.
+    ``ProofBudgetExceeded`` here — as is ``ModelAPIError`` (e.g. a 4xx/5xx
+    from the provider mid-run), so a request that a given provider rejects
+    (deepseek-reasoner has been the one triggering this in practice) still
+    persists whatever checks happened before it, instead of losing the run
+    silently.
 
     Every ``check_in_isabelle`` call is recorded in the returned
     ``ProofResult.checks``, regardless of which cap ends the run.
+
+    If ``run_logger`` is given (already started by the caller, via
+    ``RunLogWriter.log_started``), every node of the run (model thinking,
+    text, tool calls, tool returns) is appended to its JSONL log as it
+    happens — see ``query/run_log.py``. This is why the agent is driven via
+    ``agent.iter()`` below instead of the simpler ``agent.run()``: only
+    ``iter()`` exposes each step as it's produced, rather than only the
+    final result.
+
+    If ``on_check`` is given, it's called synchronously right after each real
+    ``check_in_isabelle`` call, so a caller can persist that pass immediately
+    (e.g. to Supabase) instead of only getting the full trail once the run
+    ends — see ``ProofDeps.on_check``.
     """
     agent = build_proof_agent(
         model_name=model_name,
@@ -241,21 +340,30 @@ async def prove_exercise(
         proposed_thy_code=proposed_thy_code,
         previous_attempts=previous_attempts or [],
         max_isabelle_checks=max_isabelle_checks,
+        build_timeout_seconds=build_timeout_seconds,
+        on_check=on_check,
     )
     usage_limits = UsageLimits(
         request_limit=max_requests or (2 * max_isabelle_checks + output_retries + 2)
     )
 
     try:
-        result = await agent.run(
+        async with agent.iter(
             "Formalize and prove the exercise.", deps=deps, usage_limits=usage_limits
-        )
-    except (UsageLimitExceeded, UnexpectedModelBehavior) as e:
+        ) as agent_run:
+            async for node in agent_run:
+                if run_logger:
+                    run_logger.log_node(node)
+        assert agent_run.result is not None
+        result = agent_run.result
+    except (UsageLimitExceeded, UnexpectedModelBehavior, ModelAPIError) as e:
         logger.warning(
             "Proof agent aborted after %d Isabelle check(s): %s",
             len(deps.checks),
             e,
         )
+        if run_logger:
+            run_logger.log_event({"type": "aborted", "reason": str(e)})
         raise ProofBudgetExceeded(deps.checks) from e
 
     usage = result.usage()

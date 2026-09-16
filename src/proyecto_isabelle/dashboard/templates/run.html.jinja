@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Run {{ run_id }}</title>
+{% if running %}<meta http-equiv="refresh" content="3">{% endif %}
+<style>
+  body { font-family: -apple-system, sans-serif; margin: 2rem; background: #fafafa; color: #222; max-width: 900px; }
+  a { color: #0b5fff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .event { margin: 0.6rem 0; padding: 0.6rem 0.9rem; border-radius: 6px; border: 1px solid #ddd; }
+  .thinking { background: #f5f0ff; font-style: italic; color: #555; }
+  .text { background: #eef6ff; }
+  .tool_call { background: #fffbe6; }
+  .tool_return.ok { background: #e8f8e8; }
+  .tool_return.fail { background: #fbe8e8; }
+  .retry { background: #fdeee0; }
+  .meta { background: #eee; font-weight: bold; }
+  pre { white-space: pre-wrap; word-break: break-word; margin: 0.3rem 0 0; font-weight: normal; }
+  .ts { color: #888; font-size: 0.8em; margin-top: 0.2rem; }
+  .badge { padding: 0.15rem 0.6rem; border-radius: 4px; font-size: 0.85em; }
+  .running { background: #ffe9a8; }
+  .exercise { background: #fff; margin: 1rem 0 1.4rem; padding: 0.9rem 1.1rem; border-radius: 6px; border: 1px solid #ddd; }
+  .exercise h2 { margin: 0 0 0.4rem; font-size: 1em; }
+  .exercise section + section { margin-top: 0.8rem; }
+  nav a { margin-right: 1rem; }
+</style>
+</head>
+<body>
+<nav><a href="/">&larr; all runs</a><a href="/benchmark">Benchmark coverage</a></nav>
+<h1>Run {{ run_id }}</h1>
+
+{% if events is none %}
+<p>No local log for this run — it may predate this feature, or was loaded
+from the dev cache instead of a fresh agent run.</p>
+{% else %}
+  {% if running %}<p><span class="badge running">running</span> — this page refreshes automatically.</p>{% endif %}
+
+  {% set started = events | selectattr("type", "equalto", "run_started") | first %}
+  {% if started and (started.exercise_statement or started.proof) %}
+  <div class="exercise">
+    {% if started.exercise_statement %}
+    <section>
+      <h2>Exercise</h2>
+      <pre>{{ started.exercise_statement }}</pre>
+    </section>
+    {% endif %}
+    {% if started.proof %}
+    <section>
+      <h2>Proof</h2>
+      <pre>{{ started.proof }}</pre>
+    </section>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% for e in events %}
+    {% if e.type == "run_started" %}
+      <div class="event meta">Started — exercise: {{ e.exercise_name }}, model: {{ e.model_name }}, max checks: {{ e.max_isabelle_checks }}
+        <div class="ts">{{ e.ts }}</div></div>
+    {% elif e.type == "thinking" %}
+      <div class="event thinking"><strong>thinking</strong><pre>{{ e.content }}</pre><div class="ts">{{ e.ts }}</div></div>
+    {% elif e.type == "text" %}
+      <div class="event text"><strong>text</strong><pre>{{ e.content }}</pre><div class="ts">{{ e.ts }}</div></div>
+    {% elif e.type == "tool_call" %}
+      <div class="event tool_call"><strong>tool call: {{ e.tool_name }}</strong><pre>{{ e.args }}</pre><div class="ts">{{ e.ts }}</div></div>
+    {% elif e.type == "tool_return" %}
+      <div class="event tool_return {{ 'ok' if e.content and 'OK' in e.content else 'fail' }}">
+        <strong>tool return: {{ e.tool_name }}</strong><pre>{{ e.content }}</pre><div class="ts">{{ e.ts }}</div></div>
+    {% elif e.type == "retry" %}
+      <div class="event retry"><strong>retry requested</strong><pre>{{ e.content }}</pre><div class="ts">{{ e.ts }}</div></div>
+    {% elif e.type == "aborted" %}
+      <div class="event tool_return fail"><strong>aborted</strong><pre>{{ e.reason }}</pre><div class="ts">{{ e.ts }}</div></div>
+    {% elif e.type == "final_reverification" %}
+      <div class="event meta">Final independent re-verification: {{ "verified" if e.verified else "failed" }}
+        {% if e.errors %}<pre>{{ e.errors|join("\n") }}</pre>{% endif %}
+        <div class="ts">{{ e.ts }}</div></div>
+    {% elif e.type == "run_finished" %}
+      <div class="event meta">Finished — verified: {{ e.verified }}, requests: {{ e.request_count }}, tokens: {{ e.total_tokens }}
+        {%- if e.hit_retry_budget %}, hit retry budget{% endif %}
+        <div class="ts">{{ e.ts }}</div></div>
+    {% endif %}
+  {% endfor %}
+{% endif %}
+</body>
+</html>

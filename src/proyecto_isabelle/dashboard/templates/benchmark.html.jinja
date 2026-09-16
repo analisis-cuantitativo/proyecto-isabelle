@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Benchmark coverage</title>
+<style>
+  body { font-family: -apple-system, sans-serif; margin: 2rem; background: #fafafa; color: #222; max-width: 900px; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 1.5rem; }
+  th, td { text-align: left; padding: 0.4rem 0.8rem; border-bottom: 1px solid #ddd; }
+  th { color: #555; font-size: 0.85em; text-transform: uppercase; }
+  a { color: #0b5fff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .badge { padding: 0.15rem 0.6rem; border-radius: 4px; font-size: 0.85em; }
+  .verified { background: #c8f0c8; }
+  .failed { background: #f8c8c8; }
+  .selected { background: #eef6ff; }
+  nav { margin-bottom: 1rem; }
+  nav a { margin-right: 1rem; }
+  form.filters { margin: 0.8rem 0; }
+  form.filters select { padding: 0.25rem 0.5rem; }
+  .error { background: #fbe8e8; border: 1px solid #f0b8b8; border-radius: 6px; padding: 0.8rem 1rem; }
+  .num { text-align: right; }
+</style>
+</head>
+<body>
+<nav><a href="/">&larr; runs</a><a href="/benchmark">Benchmark coverage</a></nav>
+<h1>Benchmark coverage</h1>
+
+{% if error %}
+<div class="error">
+  <p>Couldn't read the <code>benchmark</code> table from Supabase:</p>
+  <pre>{{ error }}</pre>
+  <p>This page needs <code>SUPABASE_URL</code>, <code>SUPABASE_KEY</code>,
+  <code>SUPABASE_EMAIL</code> and <code>SUPABASE_PASSWORD</code> in <code>.env</code>
+  (same credentials <code>scripts/run.py</code> uses).</p>
+</div>
+{% else %}
+
+<p>{{ total_exercises }} exercise(s) have a statement and could be attempted.
+Coverage is the share of those attempted at least once; accuracy is the
+share of attempted exercises a model's final, independently-reverified pass
+verified.</p>
+
+<form class="filters" method="get">
+  <label>Model:
+    <select name="model" onchange="this.form.submit()">
+      <option value="">All (summary only)</option>
+      {% for m in models %}
+      <option value="{{ m }}" {% if m == model %}selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+{% if not stats %}
+<p>No benchmark rows yet.</p>
+{% else %}
+<table>
+<tr>
+  <th>Model</th><th class="num">Attempted</th><th class="num">Verified</th>
+  <th class="num">Coverage</th><th class="num">Accuracy</th><th class="num">Solved / total</th>
+</tr>
+{% for s in stats %}
+<tr class="{{ 'selected' if s.model_name == model }}">
+  <td><a href="/benchmark?model={{ s.model_name }}">{{ s.model_name }}</a></td>
+  <td class="num">{{ s.attempted }}</td>
+  <td class="num">{{ s.verified }}</td>
+  <td class="num">{{ s.coverage_pct }}%</td>
+  <td class="num">{{ s.accuracy_pct }}%</td>
+  <td class="num">{{ s.solved_pct }}%</td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+
+{% if breakdown %}
+<h2>{{ model }} — per-exercise results</h2>
+<table>
+<tr><th>Exercise</th><th>Status</th><th class="num">Runs</th></tr>
+{% for b in breakdown %}
+<tr>
+  <td>{{ b.name }}</td>
+  <td>
+    {% if not b.attempted %}<span class="badge">not attempted</span>
+    {% elif b.verified %}<span class="badge verified">verified</span>
+    {% else %}<span class="badge failed">failed</span>
+    {% endif %}
+  </td>
+  <td class="num">{{ b.num_runs }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+
+{% endif %}
+</body>
+</html>

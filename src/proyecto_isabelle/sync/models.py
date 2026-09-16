@@ -73,12 +73,16 @@ class Benchmark(BaseModel):
     """The maximum number of passes the model was allowed for this run."""
 
     hit_retry_budget: bool = False
-    """Whether the run stopped because it exhausted its retry budget,
-    rather than the model voluntarily submitting a final answer."""
+    """Whether the run stopped because it exhausted its retry budget, rather
+    than the model voluntarily submitting a final answer. Passes are written
+    as they happen, before this is known, so it starts ``False`` on every row
+    and gets patched to ``True`` for the whole run (by ``run_id``) once the
+    run actually aborts — see ``SupabaseRepository.mark_run_hit_retry_budget``."""
 
     tokens_consumed: int
-    """Total tokens consumed by the whole run (a run-level fact, duplicated
-    across the run's rows, not a per-pass count)."""
+    """Cumulative input+output tokens through this pass (i.e. including every
+    prior pass in the same run), not a per-pass delta. The highest
+    ``pass_number`` row's value is the run's total."""
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
     """When the row was created."""

@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 from enum import Enum
-from uuid import uuid4
+from uuid import UUID
 
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -124,56 +124,69 @@ class SupabaseRepository:
         )
         return insert_resp.data[0]["id"]
 
-    def save_benchmark(
+    def save_benchmark_pass(
         self,
         exercise: Exercise,
-        checks: list[IsabelleCheck],
+        check: IsabelleCheck,
         model_name: str,
         max_num_of_passes: int,
-        tokens_consumed: int = 0,
-        hit_retry_budget: bool = False,
+        run_id: UUID,
+        pass_number: int,
     ) -> None:
-        """Persist one proof-agent run as one `benchmark` row per pass.
+        """Persist one `benchmark` row for a single pass, immediately.
 
-        All rows share a fresh ``run_id``; the row with the highest
-        ``pass_number`` is the run's final answer (by convention, callers
-        should make that the independently-reverified attempt, not just the
-        model's last self-reported check). Works the same whether the run
-        finished normally or was cut short by ``ProofBudgetExceeded`` — pass
-        that exception's ``.checks`` and ``hit_retry_budget=True``.
+        Callers insert one row per real ``check_in_isabelle`` call — plus one
+        more for the final, independently-reverified attempt — as each
+        happens, rather than batching a whole run's rows into one insert at
+        the end. That way a run's progress survives a crash partway through
+        (including one that isn't caught anywhere), instead of an
+        end-of-run-only write losing everything.
+
+        The row with the highest ``pass_number`` for a ``run_id`` is that
+        run's final answer (by convention, callers should make that the
+        independently-reverified attempt, not just the model's last
+        self-reported check). ``hit_retry_budget`` isn't known at insert
+        time — it starts ``False`` here and gets patched via
+        ``mark_run_hit_retry_budget`` if the run actually aborts.
+
+        ``run_id`` and ``pass_number`` are the caller's responsibility (unlike
+        the old batch ``save_benchmark``, this can't derive ``pass_number``
+        from a list position) — callers that also keep a local run log
+        (``query/run_log.py``) should reuse the same ``run_id`` there, so the
+        Supabase rows and the local log file refer to the same run.
         """
         if exercise.id is None:
-            raise ValueError("Exercise needs an id to be turned into Benchmark rows.")
-        if not checks:
-            raise ValueError(
-                "No checks to persist — the run never called check_in_isabelle."
-            )
+            raise ValueError("Exercise needs an id to be turned into a Benchmark row.")
 
-        run_id = uuid4()
         was_given_correct = (
             exercise.corrected_thy_code is not None
             and exercise.statement == exercise.corrected_thy_code
         )
 
-        rows = [
-            Benchmark(
-                run_id=run_id,
-                pass_number=i,
-                exercise_id=exercise.id,
-                model_name=model_name,
-                was_given_the_correct_thy_statement=was_given_correct,
-                thy_content=check.thy_content,
-                verified=check.verified,
-                errors=check.errors,
-                max_num_of_passes=max_num_of_passes,
-                hit_retry_budget=hit_retry_budget,
-                tokens_consumed=tokens_consumed,
-            )
-            for i, check in enumerate(checks, start=1)
-        ]
+        row = Benchmark(
+            run_id=run_id,
+            pass_number=pass_number,
+            exercise_id=exercise.id,
+            model_name=model_name,
+            was_given_the_correct_thy_statement=was_given_correct,
+            thy_content=check.thy_content,
+            verified=check.verified,
+            errors=check.errors,
+            max_num_of_passes=max_num_of_passes,
+            tokens_consumed=check.tokens_consumed,
+        )
 
-        self.client.table("benchmark").insert(
-            [row.model_dump(mode="json") for row in rows]
+        self.client.table("benchmark").insert(row.model_dump(mode="json")).execute()
+
+    def mark_run_hit_retry_budget(self, run_id: UUID) -> None:
+        """Flag every already-inserted pass of ``run_id`` as having hit the
+        retry budget, once ``ProofBudgetExceeded`` confirms that happened.
+
+        Patches rows written eagerly by ``save_benchmark_pass`` during the
+        run, before this was known.
+        """
+        self.client.table("benchmark").update({"hit_retry_budget": True}).eq(
+            "run_id", str(run_id)
         ).execute()
 
     def _sync_link_table(
@@ -230,26 +243,39 @@ class SupabaseRepository:
         return Exercise.model_validate(response.data[0])
 
     def get_missing_exercises_by_model(self, model_name: str) -> list[Exercise]:
-        """
-        Returns a list of exercises that have not been iterated by the given model.
+        """Exercises `model_name` hasn't attempted yet, with exercises no
+        model has ever attempted sorted first.
+
+        `run_all` truncates this list with `--limit`, so the ordering matters:
+        without it, a short/interrupted run would keep re-covering exercises
+        other models already have data for instead of growing the benchmark's
+        overall exercise coverage. Exercises already attempted by `model_name`
+        are excluded outright (that's the "missing" part); among the rest,
+        never-attempted-by-anyone exercises come before ones other models
+        have already tried, and each of those two groups is alphabetical by
+        exercise name.
         """
         benchmark_response = (
-            self.client.table("benchmark")
-            .select("exercise_id")
-            .eq("model_name", model_name)
-            .execute()
+            self.client.table("benchmark").select("exercise_id, model_name").execute()
         )
 
-        iterated_ids = [row["exercise_id"] for row in benchmark_response.data]
+        attempted_by_model: set[int] = set()
+        attempted_by_any: set[int] = set()
+        for row in benchmark_response.data:
+            attempted_by_any.add(row["exercise_id"])
+            if row["model_name"] == model_name:
+                attempted_by_model.add(row["exercise_id"])
 
         query = self.client.table("exercise_full").select("*")
 
-        if iterated_ids:
-            query = query.not_.in_("id", iterated_ids)
+        if attempted_by_model:
+            query = query.not_.in_("id", list(attempted_by_model))
 
         response = query.execute()
 
-        return [Exercise.model_validate(row) for row in response.data]
+        exercises = [Exercise.model_validate(row) for row in response.data]
+        exercises.sort(key=lambda e: (e.id in attempted_by_any, e.name))
+        return exercises
 
     def write(self, exercise: Exercise) -> WriteResult:
         """
@@ -363,6 +389,39 @@ class SupabaseRepository:
         return WriteResult(
             WriteStatus.UPDATED, exercise_id, set(db_payload) | changed_links
         )
+
+    def list_benchmarkable_exercises(self) -> list[dict]:
+        """``{id, name}`` for every exercise with a statement, i.e. one the
+        proof agent could actually be run against. Used as the denominator
+        for dashboard coverage stats — an exercise with no statement can
+        never produce a `benchmark` row (`query_content` raises on it), so
+        it shouldn't count against an agent's coverage.
+        """
+        response = (
+            self.client.table("exercise")
+            .select("id, name")
+            .not_.is_("statement", "null")
+            .execute()
+        )
+        return response.data
+
+    def list_benchmark_rows(self) -> list[dict]:
+        """Raw ``{exercise_id, model_name, run_id, pass_number, verified,
+        hit_retry_budget}`` for every pass ever recorded, across all models.
+
+        Dicts rather than ``Benchmark`` instances, and only these columns —
+        the dashboard's aggregate stats page groups/counts over them and has
+        no use for the (potentially large) ``thy_content``/``errors`` fields.
+        """
+        response = (
+            self.client.table("benchmark")
+            .select(
+                "exercise_id, model_name, run_id, pass_number, verified, "
+                "hit_retry_budget"
+            )
+            .execute()
+        )
+        return response.data
 
     def read_with_empty_proposed_thy(self) -> list[Exercise]:
         # Un solo request usando .or_()

@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Proof Agent Runs</title>
+{% if auto_refresh %}<meta http-equiv="refresh" content="3">{% endif %}
+<style>
+  body { font-family: -apple-system, sans-serif; margin: 2rem; background: #fafafa; color: #222; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 0.4rem 0.8rem; border-bottom: 1px solid #ddd; }
+  th { color: #555; font-size: 0.85em; text-transform: uppercase; }
+  a { color: #0b5fff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .badge { padding: 0.15rem 0.6rem; border-radius: 4px; font-size: 0.85em; }
+  .running { background: #ffe9a8; }
+  .verified { background: #c8f0c8; }
+  .failed { background: #f8c8c8; }
+  nav { margin-bottom: 1rem; }
+  nav a { margin-right: 1rem; }
+  form.filters { margin: 0.8rem 0; }
+  form.filters select { padding: 0.25rem 0.5rem; }
+</style>
+</head>
+<body>
+<nav><a href="/">Runs</a><a href="/benchmark">Benchmark coverage</a></nav>
+<h1>Proof Agent Runs</h1>
+<form class="filters" method="get">
+  <label>Model:
+    <select name="model" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for m in models %}
+      <option value="{{ m }}" {% if m == model %}selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+{% if not runs %}
+<p>No runs logged{% if model %} for model <code>{{ model }}</code>{% endif %}.
+Run <code>scripts/run.py</code> to produce one.</p>
+{% else %}
+<table>
+<tr><th>Exercise</th><th>Model</th><th>Started</th><th>Status</th><th>Isabelle checks</th></tr>
+{% for run in runs %}
+<tr>
+  <td><a href="/runs/{{ run.run_id }}">{{ run.exercise_name or run.run_id }}</a></td>
+  <td>{{ run.model_name or "" }}</td>
+  <td>{{ run.started_at or "" }}</td>
+  <td>
+    {% if run.running %}<span class="badge running">running</span>
+    {% elif run.verified %}<span class="badge verified">verified</span>
+    {% else %}<span class="badge failed">failed{% if run.hit_retry_budget %} (budget){% endif %}</span>
+    {% endif %}
+  </td>
+  <td>{{ run.num_checks }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+</body>
+</html>

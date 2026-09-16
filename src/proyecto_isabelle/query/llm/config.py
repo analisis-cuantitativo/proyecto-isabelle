@@ -19,6 +19,8 @@ class LLMConfig(BaseSettings):
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
     google_api_key: str | None = None
+    deepseek_api_key: str | None = None
+    moonshotai_api_key: str | None = None
 
     # Local model endpoints
     ollama_base_url: str = "http://localhost:11434"
