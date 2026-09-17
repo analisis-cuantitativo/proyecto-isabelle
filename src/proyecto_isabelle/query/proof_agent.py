@@ -33,6 +33,7 @@ from pydantic_ai.exceptions import (
 )
 from pydantic_ai.models import Model, infer_model
 from pydantic_ai.models.anthropic import AnthropicModelSettings
+from pydantic_ai.models.openai import OpenAIResponsesModelSettings
 from pydantic_ai.providers import Provider, infer_provider_class
 from pydantic_ai.settings import ModelSettings
 
@@ -208,6 +209,16 @@ def build_proof_agent(
                 "type": "enabled",
                 "budget_tokens": thinking_budget,
             }
+        elif model_name.startswith("openai-responses:"):
+            # Without this, the Responses API still reasons internally but
+            # omits the summary text from the reasoning item it returns —
+            # pydantic_ai then emits a ThinkingPart with empty `content`
+            # (just carrying the encrypted signature), so nothing shows up
+            # in the run log/dashboard even though reasoning tokens were
+            # billed. This asks for the summary text itself.
+            cast(OpenAIResponsesModelSettings, settings)["openai_reasoning_summary"] = (
+                "detailed"
+            )
 
     agent: Agent[ProofDeps, ProofAttempt] = Agent(
         model,

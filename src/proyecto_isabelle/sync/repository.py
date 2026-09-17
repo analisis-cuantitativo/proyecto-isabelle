@@ -412,16 +412,32 @@ class SupabaseRepository:
         Dicts rather than ``Benchmark`` instances, and only these columns —
         the dashboard's aggregate stats page groups/counts over them and has
         no use for the (potentially large) ``thy_content``/``errors`` fields.
+
+        Paginated via ``.range()``: PostgREST caps a single unpaginated
+        response at its ``db.max_rows`` setting (1000 here), so a single
+        ``.execute()`` silently truncated this once the table passed that
+        size — the dashboard then lost visibility into whichever
+        exercise/model attempts happened to land past the cutoff, making
+        recently-attempted exercises look never-attempted.
         """
-        response = (
-            self.client.table("benchmark")
-            .select(
-                "exercise_id, model_name, run_id, pass_number, verified, "
-                "hit_retry_budget"
+        page_size = 1000
+        rows: list[dict] = []
+        start = 0
+        while True:
+            response = (
+                self.client.table("benchmark")
+                .select(
+                    "exercise_id, model_name, run_id, pass_number, verified, "
+                    "hit_retry_budget"
+                )
+                .range(start, start + page_size - 1)
+                .execute()
             )
-            .execute()
-        )
-        return response.data
+            rows.extend(response.data)
+            if len(response.data) < page_size:
+                break
+            start += page_size
+        return rows
 
     def read_with_empty_proposed_thy(self) -> list[Exercise]:
         # Un solo request usando .or_()

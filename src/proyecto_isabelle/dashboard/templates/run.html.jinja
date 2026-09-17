@@ -31,8 +31,8 @@
 <h1>Run {{ run_id }}</h1>
 
 {% if events is none %}
-<p>No local log for this run — it may predate this feature, or was loaded
-from the dev cache instead of a fresh agent run.</p>
+<p>No local log for this run — it predates cache-hit replays being logged
+locally.</p>
 {% else %}
   {% if running %}<p><span class="badge running">running</span> — this page refreshes automatically.</p>{% endif %}
 

@@ -124,9 +124,6 @@ def _prove_and_save_one(
     cache_path = _cache_path(exercise_name, model_name)
     proof_result = _load_cached_result(cache_path) if use_cache else None
 
-    # A cache hit replays a previous run's result with no fresh LLM/Isabelle
-    # interactions to observe, so there's nothing for a local run log to
-    # record — `run_id` still gets a fresh benchmark row, just no log file.
     run_id = uuid4()
     writer = None
 
@@ -144,10 +141,32 @@ def _prove_and_save_one(
 
     if proof_result is not None:
         console.print(f"[dim]{exercise_name}: using cached agent result[/dim]")
-        # A cache hit never went through `on_check` live, so replay it here
-        # to end up with the same rows a fresh run would have produced.
+        # A cache hit never went through `on_check`/the run log live, so
+        # replay both here — otherwise the run gets fresh `benchmark` rows
+        # (via on_check below) but no local log file, making it invisible
+        # on the dashboard's run list even though the DB changed.
+        writer = RunLogWriter(run_id)
+        writer.log_started(
+            exercise_name,
+            model_name,
+            max_isabelle_checks,
+            exercise_statement=exercise.statement,
+            proof=exercise.proof if with_proof else None,
+            max_isabelle_queries=max_isabelle_queries,
+        )
         for check in proof_result.checks:
             on_check(check)
+            writer.log_event(
+                {
+                    "type": "tool_return",
+                    "tool_name": "check_in_isabelle",
+                    "content": (
+                        "OK: the proof builds and contains no sorry/oops."
+                        if check.verified
+                        else f"FAILED: {'; '.join(check.errors)}"
+                    ),
+                }
+            )
     else:
         for attempt_num in range(1, max_empty_response_retries + 2):
             writer = RunLogWriter(run_id)
