@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Compare models</title>
+<style>
+  body { font-family: -apple-system, sans-serif; margin: 2rem; background: #fafafa; color: #222; }
+  table { border-collapse: collapse; margin-bottom: 1.5rem; }
+  th, td { text-align: left; padding: 0.4rem 0.8rem; border-bottom: 1px solid #ddd; }
+  th { color: #555; font-size: 0.85em; text-transform: uppercase; }
+  td.cell { text-align: center; }
+  tfoot td { font-weight: 600; border-top: 2px solid #bbb; }
+  a { color: #0b5fff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .badge { padding: 0.15rem 0.6rem; border-radius: 4px; font-size: 0.85em; }
+  .verified { background: #c8f0c8; }
+  .failed { background: #f8c8c8; }
+  .none { color: #999; }
+  nav { margin-bottom: 1rem; }
+  nav a { margin-right: 1rem; }
+  .error { background: #fbe8e8; border: 1px solid #f0b8b8; border-radius: 6px; padding: 0.8rem 1rem; max-width: 900px; }
+</style>
+</head>
+<body>
+<nav><a href="/">&larr; runs</a><a href="/benchmark">Benchmark coverage</a><a href="/compare">Compare models</a></nav>
+<h1>Compare models</h1>
+
+{% if error %}
+<div class="error">
+  <p>Couldn't read the <code>benchmark</code> table from Supabase:</p>
+  <pre>{{ error }}</pre>
+  <p>This page needs <code>SUPABASE_URL</code>, <code>SUPABASE_KEY</code>,
+  <code>SUPABASE_EMAIL</code> and <code>SUPABASE_PASSWORD</code> in <code>.env</code>.</p>
+</div>
+{% elif not models %}
+<p>No benchmark rows yet.</p>
+{% else %}
+<p>One row per exercise, one column per model. A cell is <em>verified</em> if
+any of that model's runs on the exercise ended with a verified final pass;
+the number in parentheses is how many runs there were.</p>
+<table>
+<thead>
+<tr>
+  <th>Exercise</th>
+  {% for m in models %}<th class="cell"><a href="/benchmark?model={{ m }}">{{ m }}</a></th>{% endfor %}
+</tr>
+</thead>
+<tbody>
+{% for row in matrix %}
+<tr>
+  <td>{{ row.name }}</td>
+  {% for c in row.cells %}
+  <td class="cell">
+    {% if not c.num_runs %}<span class="none">&ndash;</span>
+    {% elif c.verified %}<span class="badge verified">verified ({{ c.num_runs }})</span>
+    {% else %}<span class="badge failed">failed ({{ c.num_runs }})</span>
+    {% endif %}
+  </td>
+  {% endfor %}
+</tr>
+{% endfor %}
+</tbody>
+<tfoot>
+<tr>
+  <td>Solved</td>
+  {% for n in solved_by_model %}<td class="cell">{{ n }} / {{ matrix | length }}</td>{% endfor %}
+</tr>
+</tfoot>
+</table>
+{% endif %}
+</body>
+</html>

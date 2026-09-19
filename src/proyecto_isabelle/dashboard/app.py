@@ -144,6 +144,36 @@ def _exercise_breakdown(
     return sorted(breakdown, key=lambda b: b["name"])
 
 
+def _exercise_matrix(
+    rows: list[dict[str, Any]], exercises: list[dict[str, Any]]
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Exercises × models grid: each cell is attempted / verified / # of runs.
+
+    Same verified-if-any-run-verified rule as ``_exercise_breakdown``, just
+    computed for every model at once. Returns the sorted model names (the
+    columns) and one row per exercise (sorted by name) whose ``cells`` line
+    up with those columns.
+    """
+    cells: dict[tuple[int, str], dict[str, Any]] = {}
+    for f in _final_passes_by_run(rows):
+        cell = cells.setdefault(
+            (f["exercise_id"], f["model_name"]), {"num_runs": 0, "verified": False}
+        )
+        cell["num_runs"] += 1
+        cell["verified"] = cell["verified"] or bool(f["verified"])
+
+    models = sorted({model for _, model in cells})
+    empty = {"num_runs": 0, "verified": False}
+    matrix = [
+        {
+            "name": ex["name"],
+            "cells": [cells.get((ex["id"], m), empty) for m in models],
+        }
+        for ex in sorted(exercises, key=lambda ex: ex["name"])
+    ]
+    return models, matrix
+
+
 @app.get("/", response_class=HTMLResponse)
 def list_runs(request: Request, model: str | None = None) -> HTMLResponse:
     paths = (
@@ -229,3 +259,32 @@ def show_benchmark(request: Request, model: str | None = None) -> HTMLResponse:
             "total_exercises": len(exercises),
         },
     )
+
+
+@app.get("/compare", response_class=HTMLResponse)
+def show_compare(request: Request) -> HTMLResponse:
+    """Exercise-by-exercise comparison: one row per exercise, one column per model."""
+    context: dict[str, Any] = {
+        "error": None,
+        "models": [],
+        "matrix": [],
+        "solved_by_model": [],
+    }
+    try:
+        repo = _get_repo()
+        exercises = repo.list_benchmarkable_exercises()
+        rows = repo.list_benchmark_rows()
+    except Exception as e:
+        context["error"] = str(e)
+        return templates.TemplateResponse(request, "compare.html.jinja", context)
+
+    models, matrix = _exercise_matrix(rows, exercises)
+    context.update(
+        models=models,
+        matrix=matrix,
+        solved_by_model=[
+            sum(1 for row in matrix if row["cells"][i]["verified"])
+            for i in range(len(models))
+        ],
+    )
+    return templates.TemplateResponse(request, "compare.html.jinja", context)
