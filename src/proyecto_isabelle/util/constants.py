@@ -6,6 +6,7 @@ from enum import StrEnum
 ROOT_DIR = Path(__file__).parent.parent.parent.parent
 PROOFS_DIR = ROOT_DIR / "data" / "proofs"
 RUN_LOGS_DIR = ROOT_DIR / "data" / "run_logs"
+ANALYSIS_DIR = ROOT_DIR / "data" / "analysis"
 
 
 class Models(StrEnum):

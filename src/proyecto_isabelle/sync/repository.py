@@ -439,6 +439,64 @@ class SupabaseRepository:
             start += page_size
         return rows
 
+    def list_full_benchmark_rows(self) -> list[dict]:
+        """Every `benchmark` column except `thy_content`, for every pass ever
+        recorded, across all models.
+
+        Unlike `list_benchmark_rows` (used by the dashboard's lean coverage
+        stats), this keeps `errors` and `tokens_consumed` — the columns the
+        offline analysis package (`proyecto_isabelle.analysis`) needs for
+        token/error-pattern breakdowns. `thy_content` is still dropped: it's
+        large and unused by any aggregate stat.
+
+        Paginated the same way as `list_benchmark_rows`, for the same reason
+        (PostgREST's default 1000-row cap per response).
+        """
+        page_size = 1000
+        rows: list[dict] = []
+        start = 0
+        while True:
+            response = (
+                self.client.table("benchmark")
+                .select(
+                    "id, run_id, pass_number, exercise_id, model_name, "
+                    "was_given_the_correct_thy_statement, verified, errors, "
+                    "max_num_of_passes, hit_retry_budget, tokens_consumed, "
+                    "created_at"
+                )
+                .range(start, start + page_size - 1)
+                .execute()
+            )
+            rows.extend(response.data)
+            if len(response.data) < page_size:
+                break
+            start += page_size
+        return rows
+
+    def list_all_exercises(self) -> list[Exercise]:
+        """Every exercise with a statement (see `list_benchmarkable_exercises`
+        for why that's the right filter), as full `Exercise` objects — topics,
+        `msc_code`, and source included — for the offline analysis package.
+
+        Paginated the same way as `list_full_benchmark_rows`.
+        """
+        page_size = 1000
+        rows: list[dict] = []
+        start = 0
+        while True:
+            response = (
+                self.client.table("exercise_full")
+                .select("*")
+                .not_.is_("statement", "null")
+                .range(start, start + page_size - 1)
+                .execute()
+            )
+            rows.extend(response.data)
+            if len(response.data) < page_size:
+                break
+            start += page_size
+        return [Exercise.model_validate(row) for row in rows]
+
     def read_with_empty_proposed_thy(self) -> list[Exercise]:
         # Un solo request usando .or_()
         response = (

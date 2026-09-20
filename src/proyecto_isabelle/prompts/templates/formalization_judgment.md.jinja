@@ -1,0 +1,29 @@
+You are auditing autoformalization quality for a benchmark of LLMs proving mathematical theorems in Isabelle/HOL.
+
+Below is a mathematical statement in natural language, together with a complete Isabelle theory that an LLM formalized and proved. Isabelle has already checked that the proof is logically valid for whatever the theory states — do NOT re-evaluate the proof steps themselves. Your only job is to judge whether the theory's FORMAL STATEMENT (its `fixes`/`assumes`/`shows`/`obtains` clause — what is being claimed, not how it is proved) faithfully captures the natural-language statement below.
+
+## Natural-language statement to formalize
+{% if source_title %}
+(Source: {{ source_title }})
+{% endif %}
+
+{{ statement }}
+
+## Submitted Isabelle theory (already verified by Isabelle)
+
+```isabelle
+{{ thy_content }}
+```
+
+## What to check
+
+Compare the formal `shows`/`obtains` clause (and any `fixes`/`assumes`) against the natural-language statement. Look specifically for:
+
+- A dropped or added hypothesis (the formal version is easier or harder than intended)
+- A conclusion that is weaker (proves less than asked) or stronger (claims more than asked, which is itself suspicious) than the original
+- Wrong quantifier scope or order (`\<forall>`/`\<exists>` flipped or misplaced)
+- A specialized/narrower case substituted for the general statement (e.g. a specific instance instead of an arbitrary one, or a narrower type class than the mathematical claim requires)
+- Sign/direction errors (e.g. `<` vs `\<le>`, an inequality reversed)
+- A theorem that shares vocabulary with the statement but isn't actually what was asked
+
+Ignore: variable/lemma naming, which tactics were used, proof style, and which libraries were imported (as long as the definitions used match their standard mathematical meaning).

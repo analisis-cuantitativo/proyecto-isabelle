@@ -31,6 +31,27 @@ Mode = Literal["build", "verify"]
 _THEORY_HEADER = re.compile(r"\btheory\s+([A-Za-z][\w']*)")
 _UNSOUND_COMMAND = re.compile(r"\b(sorry|oops)\b")
 _ISABELLE_COMMENT = re.compile(r"\(\*.*?\*\)", re.DOTALL)
+# `axiomatization`/`axioms` let a theory assert its own goal as a new axiom
+# and then "prove" it by citing that axiom -- a green build with no sorry/
+# oops that still proves nothing derived from the actual libraries.
+_AXIOM_COMMAND = re.compile(r"\baxiomatization\b|\baxioms\b")
+# A real `lemma`/`theorem` command: the keyword followed by either a name
+# and colon (`lemma foo:`) or an anonymous statement (`lemma "..."`). Without
+# this, a comment-only theory (e.g. one that just argues the goal is false)
+# trivially "builds" with nothing to fail on, and would otherwise count as
+# verified.
+_STATEMENT_COMMAND = re.compile(r"\b(?:lemma|theorem)\b\s*(?:\S+\s*:|\")")
+
+# Prefix of the error `_run_build` appends when `incomplete` is non-empty --
+# shared with `analysis.integrity` so it can recognize a `benchmark` row this
+# project retroactively re-flagged as gamed (same error text, since the
+# retroactive fix script reused this exact message) without re-deriving
+# "gamed" from content alone, which would also match unrelated pre-existing
+# rows that happen to share a reason (e.g. an old `check_in_isabelle`-probe
+# with no statement) without ever having been corrected.
+INCOMPLETE_PROOF_ERROR_PREFIX = (
+    "Build succeeded but the proof doesn't count as verified"
+)
 
 
 def _resolve_api_url(api_url: str | None) -> str:
@@ -117,10 +138,17 @@ def _strip_comments(text: str) -> str:
 
 
 def _incomplete_commands(thy_content: str) -> list[str]:
-    """`sorry` / `oops` left in the proof text make a green build meaningless."""
-    return sorted(
-        {m.group(1) for m in _UNSOUND_COMMAND.finditer(_strip_comments(thy_content))}
-    )
+    """Reasons a green build still isn't a real, checked proof: `sorry`/
+    `oops` left in, the goal asserted via `axiomatization`/`axioms` instead
+    of derived, or no `lemma`/`theorem` statement submitted at all (an empty
+    or comment-only theory trivially "builds")."""
+    stripped = _strip_comments(thy_content)
+    reasons = sorted({m.group(1) for m in _UNSOUND_COMMAND.finditer(stripped)})
+    if _AXIOM_COMMAND.search(stripped):
+        reasons.append("axiomatization")
+    if not _STATEMENT_COMMAND.search(stripped):
+        reasons.append("no lemma/theorem statement")
+    return reasons
 
 
 def extract_theory_name(thy_content: str) -> str:
@@ -272,10 +300,7 @@ def _run_build(
 
     verified = built and (allow_incomplete or not incomplete)
     if built and incomplete and not allow_incomplete:
-        errors.append(
-            "Build succeeded but the proof is incomplete "
-            f"({', '.join(incomplete)} present)."
-        )
+        errors.append(f"{INCOMPLETE_PROOF_ERROR_PREFIX} ({', '.join(incomplete)}).")
         message = f"Proof incomplete: {', '.join(incomplete)}"
     else:
         message = data.get("message") or (
