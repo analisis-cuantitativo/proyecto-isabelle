@@ -35,12 +35,25 @@ _ISABELLE_COMMENT = re.compile(r"\(\*.*?\*\)", re.DOTALL)
 # and then "prove" it by citing that axiom -- a green build with no sorry/
 # oops that still proves nothing derived from the actual libraries.
 _AXIOM_COMMAND = re.compile(r"\baxiomatization\b|\baxioms\b")
-# A real `lemma`/`theorem` command: the keyword followed by either a name
-# and colon (`lemma foo:`) or an anonymous statement (`lemma "..."`). Without
-# this, a comment-only theory (e.g. one that just argues the goal is false)
-# trivially "builds" with nothing to fail on, and would otherwise count as
-# verified.
-_STATEMENT_COMMAND = re.compile(r"\b(?:lemma|theorem)\b\s*(?:\S+\s*:|\")")
+# A real `lemma`/`theorem` (or `corollary`/`proposition`) command, at the
+# start of a line: whatever follows the keyword is fair game -- a name and
+# colon (`lemma foo:`), a locale target (`lemma (in group) foo:`), attributes
+# (`lemma foo [simp]:`), an unnamed statement (`lemma "..."`) or a bare
+# `assumes`/`shows` block. An earlier version required `name:` or a quote
+# right after the keyword and so wrongly rejected every `(in locale)` lemma
+# as "no statement". Without any statement, a comment-only theory (e.g. one
+# that just argues the goal is false) trivially "builds" with nothing to fail
+# on, and would otherwise count as verified.
+_STATEMENT_COMMAND = re.compile(
+    r"^[ \t]*(?:lemma|theorem|corollary|proposition)\b\s*\S", re.MULTILINE
+)
+# Prose blocks (`text \<open>...\<close>`, `section ...`): they may mention
+# "lemma" at the start of a line without being a statement.
+_PROSE_BLOCK = re.compile(
+    r"\b(?:text|txt|chapter|section|subsection|subsubsection|paragraph|"
+    r"subparagraph)\s*(?:\\<open>.*?\\<close>|\u2039.*?\u203a)",
+    re.DOTALL,
+)
 
 # Prefix of the error `_run_build` appends when `incomplete` is non-empty --
 # shared with `analysis.integrity` so it can recognize a `benchmark` row this
@@ -146,7 +159,7 @@ def _incomplete_commands(thy_content: str) -> list[str]:
     reasons = sorted({m.group(1) for m in _UNSOUND_COMMAND.finditer(stripped)})
     if _AXIOM_COMMAND.search(stripped):
         reasons.append("axiomatization")
-    if not _STATEMENT_COMMAND.search(stripped):
+    if not _STATEMENT_COMMAND.search(_PROSE_BLOCK.sub(" ", stripped)):
         reasons.append("no lemma/theorem statement")
     return reasons
 

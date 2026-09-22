@@ -16,6 +16,7 @@ a second, much-smaller "model" instead of folding it into Sonnet's numbers.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import pandas as pd
@@ -43,6 +44,15 @@ def canonicalize_model_name(model_name: str) -> str:
         if model_name.startswith(prefix):
             return f"{provider}:{model_name[len(prefix) :]}"
     return model_name
+
+
+def display_model_name(model_name: str) -> str:
+    """Short label for figures/tables: drops the provider and a trailing
+    ``YYYYMMDD`` snapshot date, and writes dashed versions with a dot
+    (``"anthropic:claude-sonnet-4-5-20250929"`` -> ``"claude-sonnet-4.5"``).
+    """
+    name = re.sub(r"-\d{8}$", "", canonicalize_model_name(model_name).split(":", 1)[-1])
+    return re.sub(r"(?<=\d)-(?=\d)", ".", name)
 
 
 def load_benchmark_passes(repo: SupabaseRepository) -> pd.DataFrame:

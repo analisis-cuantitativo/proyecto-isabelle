@@ -13,13 +13,14 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-import math  # noqa: E402
 from dataclasses import dataclass  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
+import seaborn as sns  # noqa: E402
+from matplotlib.ticker import FuncFormatter  # noqa: E402
 
 from proyecto_isabelle.analysis import difficulty as difficulty_mod  # noqa: E402
 from proyecto_isabelle.analysis import errors as errors_mod  # noqa: E402
@@ -28,6 +29,7 @@ from proyecto_isabelle.analysis import integrity as integrity_mod  # noqa: E402
 from proyecto_isabelle.analysis import tokens as tokens_mod  # noqa: E402
 from proyecto_isabelle.analysis import topics as topics_mod  # noqa: E402
 from proyecto_isabelle.analysis.data import (
+    display_model_name,
     final_passes,
     load_benchmark_passes,
     load_exercises,
@@ -36,7 +38,15 @@ from proyecto_isabelle.sync.repository import SupabaseRepository  # noqa: E402
 from proyecto_isabelle.util import ANALYSIS_DIR  # noqa: E402
 
 _FIGURE_DPI = 150
+
+# Light grid on a white background, print-sized fonts and a colorblind-safe
+# palette: legible when the figures are dropped into the (B/W-printable) report.
+sns.set_theme(style="whitegrid", context="paper", palette="colorblind", font_scale=1.2)
 _MIN_TOPIC_ATTEMPTS = 1
+# The topic heatmap needs a stricter floor: at 1 exercise there are ~170 topics
+# (mostly 0/1 or 1/1) and ranking them is mostly ties.
+_MIN_HEATMAP_EXERCISES = 2
+_HEATMAP_TOP_N = 15  # topics per heatmap (easiest / hardest)
 _TOP_N = 15
 
 
@@ -92,57 +102,81 @@ def _fig_easiest(path: Path, easiest_df: pd.DataFrame) -> None:
     fig, ax = plt.subplots(figsize=(9, max(4, len(easiest_df) * 0.35)))
     ax.barh(easiest_df["name"], easiest_df["avg_passes_to_final"])
     ax.invert_yaxis()
-    ax.set_xlabel("Average passes to final answer (lower = more trivial)")
-    ax.set_title("Easiest / most trivial exercises")
+    ax.set_xlabel("Intentos promedio hasta la respuesta final (menos = más trivial)")
+    ax.set_title("Ejercicios más fáciles")
     fig.tight_layout()
     fig.savefig(path, dpi=_FIGURE_DPI)
     plt.close(fig)
 
 
-def _fig_topic_heatmap(
-    path: Path, topic_acc: pd.DataFrame, topics_per_panel: int = 25
-) -> None:
-    """Model x topic accuracy, wrapped into several stacked panels of at most
-    `topics_per_panel` columns each -- a single row of every topic is
-    illegible once there are more than a couple dozen (with a low
-    `min_attempts`, there easily can be).
-    """
-    pivot = topic_acc.pivot(index="model_name", columns="topic", values="accuracy")
-    topics = list(pivot.columns)
-    n_panels = math.ceil(len(topics) / topics_per_panel)
+def _fig_topic_heatmap(path: Path, topic_acc: pd.DataFrame, title: str) -> None:
+    """Topic x model heatmap, one row per topic in the order given (topics as
+    rows so the labels stay horizontal). Cells are annotated with
+    ``validados/ejercicios`` since the proportion alone hides the small n."""
+    order = list(dict.fromkeys(topic_acc["topic"]))
+    pivot = topic_acc.pivot(index="topic", columns="model_name", values="accuracy")
+    counts = topic_acc.assign(
+        label=lambda d: d["verified"].astype(int).astype(str)
+        + "/"
+        + d["attempts"].astype(str)
+    ).pivot(index="topic", columns="model_name", values="label")
+    pivot, counts = pivot.loc[order], counts.loc[order, pivot.columns]
+    pivot.columns = counts.columns = [display_model_name(m) for m in pivot.columns]
+    pivot.index = counts.index = [t.replace("_", " ") for t in pivot.index]
 
-    fig, axes = plt.subplots(
-        n_panels,
-        1,
-        figsize=(
-            max(10, topics_per_panel * 0.5),
-            max(3, pivot.shape[0] * 0.6) * n_panels,
-        ),
-        constrained_layout=True,
+    # ~4in wide: meant to sit in a half-width wrapfigure in the report.
+    fig, ax = plt.subplots(figsize=(4.0, len(pivot) * 0.27 + 1.7))
+    sns.heatmap(
+        pivot,
+        annot=counts,
+        fmt="",
+        cmap="viridis",
+        vmin=0,
+        vmax=1,
+        linewidths=0.5,
+        linecolor="white",
+        annot_kws={"fontsize": 6.5},
+        cbar_kws={"label": "Fracción validada", "shrink": 0.6, "pad": 0.03},
+        ax=ax,
     )
-    axes = [axes] if n_panels == 1 else list(axes)
-
-    im = None
-    for panel_idx, ax in enumerate(axes):
-        chunk = topics[
-            panel_idx * topics_per_panel : (panel_idx + 1) * topics_per_panel
-        ]
-        sub = pivot[chunk].to_numpy()
-        im = ax.imshow(sub, cmap="RdYlGn", vmin=0, vmax=1, aspect="auto")
-        ax.set_xticks(range(len(chunk)))
-        ax.set_xticklabels(chunk, rotation=60, ha="right", fontsize=8)
-        ax.set_yticks(range(len(pivot.index)))
-        ax.set_yticklabels(pivot.index, fontsize=8)
-        for i in range(sub.shape[0]):
-            for j in range(sub.shape[1]):
-                value = sub[i, j]
-                if pd.notna(value):
-                    ax.text(j, i, f"{value:.2f}", ha="center", va="center", fontsize=7)
-
-    fig.colorbar(im, ax=axes, label="Accuracy (verified / attempts)", fraction=0.02)
-    fig.suptitle(f"Model accuracy by topic (min {_MIN_TOPIC_ATTEMPTS} attempts)")
+    ax.grid(False)
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.tick_params(axis="x", rotation=35, labelsize=7)
+    ax.tick_params(axis="y", labelsize=7)
+    plt.setp(ax.get_xticklabels(), ha="right")
+    ax.figure.axes[-1].tick_params(labelsize=7)
+    ax.figure.axes[-1].yaxis.label.set_size(7.5)
+    ax.set_title(title, fontsize=9)
+    fig.tight_layout()
     fig.savefig(path, dpi=_FIGURE_DPI)
     plt.close(fig)
+
+
+def _fig_topic_heatmaps(figures: Path, topic_acc: pd.DataFrame) -> None:
+    """Two heatmaps: the `_HEATMAP_TOP_N` easiest and hardest topics, ranked by
+    the share of validated exercises pooled over every model (ties broken by
+    how many exercises back the topic, most first)."""
+    pooled = topic_acc.groupby("topic").agg(
+        verified=("verified", "sum"), attempts=("attempts", "sum")
+    )
+    pooled["rate"] = pooled["verified"] / pooled["attempts"]
+    easiest = pooled.sort_values(["rate", "attempts"], ascending=[False, False])
+    hardest = pooled.sort_values(["rate", "attempts"], ascending=[True, False])
+    for name, ranked, title in (
+        ("easiest", easiest, "Temas más fáciles"),
+        ("hardest", hardest, "Temas más difíciles"),
+    ):
+        topics = ranked.index[:_HEATMAP_TOP_N]
+        subset = topic_acc[topic_acc["topic"].isin(topics)].copy()
+        subset["topic"] = pd.Categorical(
+            subset["topic"], categories=topics, ordered=True
+        )
+        _fig_topic_heatmap(
+            figures / f"topic_heatmap_{name}.png",
+            subset.sort_values("topic").astype({"topic": str}),
+            title,
+        )
 
 
 def _fig_tokens_vs_solved(path: Path, tvd: pd.DataFrame) -> None:
@@ -157,25 +191,29 @@ def _fig_tokens_vs_solved(path: Path, tvd: pd.DataFrame) -> None:
 
 
 def _fig_token_boxplot(path: Path, finals: pd.DataFrame) -> None:
-    models = sorted(finals["model_name"].unique())
-    series, labels = [], []
-    for model in models:
-        for verified in (True, False):
-            subset = finals.loc[
-                (finals["model_name"] == model) & (finals["verified"] == verified),
-                "tokens_consumed",
-            ]
-            if len(subset) == 0:
-                continue
-            series.append(subset.to_numpy())
-            label = "verified" if verified else "failed"
-            labels.append(f"{model}\n({label}, n={len(subset)})")
+    data = finals.assign(
+        Modelo=finals["model_name"].map(display_model_name),
+        Resultado=finals["verified"].map({True: "Validado", False: "No validado"}),
+    ).sort_values("Modelo")
 
-    fig, ax = plt.subplots(figsize=(max(10, len(labels) * 0.9), 6))
-    ax.boxplot(series, tick_labels=labels, showfliers=False)
-    ax.set_ylabel("Total tokens consumed (final pass)")
-    ax.set_title("Token consumption by model, verified vs. failed runs")
-    plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=8)
+    fig, ax = plt.subplots(figsize=(8, 5))
+    sns.boxplot(
+        data=data,
+        x="Modelo",
+        y="tokens_consumed",
+        hue="Resultado",
+        hue_order=["Validado", "No validado"],
+        showfliers=False,
+        ax=ax,
+    )
+    ax.xaxis.grid(False)
+    ax.yaxis.set_major_formatter(
+        FuncFormatter(lambda v, _: f"{v:,.0f}".replace(",", " "))
+    )
+    ax.set_xlabel("")
+    ax.set_ylabel("Tokens consumidos por ejecución")
+    ax.set_title("Consumo de tokens por modelo, según el resultado de la ejecución")
+    ax.legend(title="", loc="upper right")
     fig.tight_layout()
     fig.savefig(path, dpi=_FIGURE_DPI)
     plt.close(fig)
@@ -356,7 +394,17 @@ def build_report(min_topic_attempts: int = _MIN_TOPIC_ATTEMPTS) -> ReportPaths:
         topics_mod.specialization(topic_acc) if not topic_acc.empty else topic_acc
     )
     if not topic_acc.empty:
-        _fig_topic_heatmap(paths.figures / "topic_heatmap.png", topic_acc)
+        # Count distinct exercises (verified if any run verified), not runs, so
+        # reruns don't inflate a cell -- same rule as the model comparison table.
+        per_exercise = exploded_topics.groupby(
+            ["exercise_id", "model_name", "topic"], as_index=False
+        )["verified"].max()
+        _fig_topic_heatmaps(
+            paths.figures,
+            topics_mod.topic_model_accuracy(
+                per_exercise, min_attempts=_MIN_HEATMAP_EXERCISES
+            ),
+        )
 
     # --- (iii) tokens ---
     token_stats = tokens_mod.token_stats_by_model(finals)
@@ -593,7 +641,9 @@ def build_report(min_topic_attempts: int = _MIN_TOPIC_ATTEMPTS) -> ReportPaths:
             f"No (model, topic) pair reached the {min_topic_attempts}-attempt minimum yet."
         )
     else:
-        lines.append("![Topic accuracy heatmap](figures/topic_heatmap.png)")
+        lines.append("![Easiest topics](figures/topic_heatmap_easiest.png)")
+        lines.append("")
+        lines.append("![Hardest topics](figures/topic_heatmap_hardest.png)")
         lines.append("")
         lines.append(
             f"Most topics tag only 1-2 exercises (of {total_exercises} total), so most "
