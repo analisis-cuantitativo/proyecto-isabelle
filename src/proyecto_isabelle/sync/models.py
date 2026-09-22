@@ -41,6 +41,26 @@ class Benchmark(BaseModel):
     arrays that have to be unpacked and zipped back together by index.
     """
 
+    version: int
+    """Which benchmark campaign this pass belongs to.
+
+    1 is the original run; 2 is the re-run under equalized conditions. No
+    default on purpose (``util.BENCHMARK_VERSION`` is the one place that
+    decides): a row that silently defaulted to the wrong campaign would
+    corrupt both campaigns' numbers at once, and unlike most bad data that
+    wouldn't show up as an error anywhere -- just as a slightly-off rate.
+    """
+
+    agent_revision: str | None = None
+    """Git revision that produced this pass, as
+    ``"proyecto-isabelle@<sha>+DeepIsaHOL@<sha>"`` (see
+    ``util.revision.current_agent_revision``).
+
+    ``None`` only for campaign-1 rows, which predate it; the DB's
+    ``benchmark_version_needs_revision`` check rejects a ``None`` here for
+    any later campaign.
+    """
+
     run_id: UUID
     """Shared by every pass of the same exercise+model attempt."""
 

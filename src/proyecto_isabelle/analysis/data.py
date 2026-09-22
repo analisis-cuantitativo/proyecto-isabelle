@@ -55,14 +55,23 @@ def display_model_name(model_name: str) -> str:
     return re.sub(r"(?<=\d)-(?=\d)", ".", name)
 
 
-def load_benchmark_passes(repo: SupabaseRepository) -> pd.DataFrame:
+def load_benchmark_passes(
+    repo: SupabaseRepository, version: int | None = None
+) -> pd.DataFrame:
     """One row per real ``check_in_isabelle`` pass, across every run/model.
 
     Columns: ``run_id, pass_number, exercise_id, model_name,
     was_given_the_correct_thy_statement, verified, errors, num_errors,
-    max_num_of_passes, hit_retry_budget, tokens_consumed, created_at``.
+    max_num_of_passes, hit_retry_budget, tokens_consumed, created_at,
+    version, agent_revision``.
+
+    ``version`` restricts the load to one benchmark campaign. ``None`` loads
+    every campaign, which is fine for a cross-campaign comparison but wrong
+    for a headline rate: campaigns ran against different agent revisions, so
+    a pooled rate is an average over incomparable conditions. Callers that
+    report one number should pass a version — ``build_report`` does.
     """
-    rows = repo.list_full_benchmark_rows()
+    rows = repo.list_full_benchmark_rows(version=version)
     df = pd.DataFrame(rows)
     df["model_name_raw"] = df["model_name"]
     df["model_name"] = df["model_name"].map(canonicalize_model_name)

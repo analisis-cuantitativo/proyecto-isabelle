@@ -355,11 +355,21 @@ def _coverage_table(finals: pd.DataFrame, total_exercises: int) -> pd.DataFrame:
     return coverage.sort_values("coverage_pct", ascending=False)
 
 
-def build_report(min_topic_attempts: int = _MIN_TOPIC_ATTEMPTS) -> ReportPaths:
+def build_report(
+    min_topic_attempts: int = _MIN_TOPIC_ATTEMPTS,
+    version: int | None = None,
+) -> ReportPaths:
+    """Build the analysis report for one benchmark campaign.
+
+    ``version=None`` pools every campaign — kept as the default so existing
+    invocations keep reproducing the numbers already published, but it mixes
+    runs made against different agent revisions. Pass ``version=1`` to
+    reproduce the original report exactly, or ``version=2`` for the re-run.
+    """
     paths = _new_report_paths()
     repo = SupabaseRepository()
 
-    passes = load_benchmark_passes(repo)
+    passes = load_benchmark_passes(repo, version=version)
     exercises = load_exercises(repo)
     finals = final_passes(passes)
     total_exercises = len(exercises)

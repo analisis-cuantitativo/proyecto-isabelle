@@ -21,8 +21,24 @@ def main(
         1,
         help="Minimum (model, topic) attempts before it's included in the specialization breakdown.",
     ),
+    version: int = typer.Option(
+        0,
+        help=(
+            "Benchmark campaign to report on (0 = all campaigns pooled). "
+            "Campaigns ran against different agent revisions, so a pooled "
+            "report averages incomparable conditions -- pass 1 or 2."
+        ),
+    ),
 ) -> None:
-    paths = build_report(min_topic_attempts=min_topic_attempts)
+    paths = build_report(
+        min_topic_attempts=min_topic_attempts,
+        version=version or None,
+    )
+    if not version:
+        typer.echo(
+            "Warning: reporting over all campaigns pooled; pass --version to "
+            "scope to one."
+        )
     typer.echo(f"Report written to {paths.report_md}")
     typer.echo(f"Figures written to {paths.figures}")
 

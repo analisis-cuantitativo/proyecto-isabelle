@@ -31,7 +31,13 @@ from proyecto_isabelle.query.proof_agent import (
 from proyecto_isabelle.query.run_log import RunLogWriter
 from proyecto_isabelle.sync.models import Exercise
 from proyecto_isabelle.sync.repository import SupabaseRepository
-from proyecto_isabelle.util import PROOFS_DIR, ROOT_DIR, sanitize_model_name
+from proyecto_isabelle.util import (
+    BENCHMARK_VERSION,
+    PROOFS_DIR,
+    ROOT_DIR,
+    current_agent_revision,
+    sanitize_model_name,
+)
 
 app = typer.Typer()
 console = Console()
@@ -41,8 +47,20 @@ console = Console()
 CACHE_DIR = ROOT_DIR / "data" / "cache" / "proof_agent"
 
 
-def _cache_path(exercise_name: str, model_name: str) -> Path:
-    return CACHE_DIR / f"{exercise_name}__{sanitize_model_name(model_name)}.json"
+def _cache_path(exercise_name: str, model_name: str, version: int) -> Path:
+    """Cache file for one exercise+model+campaign.
+
+    ``version`` is part of the key, not just the row: a campaign exists to
+    re-measure under new conditions, so replaying campaign 1's cached LLM
+    output into campaign 2's rows would produce a campaign that never
+    actually ran — identical answers, stamped with the new agent revision.
+    Separate keys mean `--use-cache` stays a safe default across campaigns.
+    """
+    return (
+        CACHE_DIR
+        / f"v{version}"
+        / f"{exercise_name}__{sanitize_model_name(model_name)}.json"
+    )
 
 
 def _load_cached_result(cache_path: Path) -> ProofResult | None:
@@ -76,6 +94,23 @@ def _save_cached_result(cache_path: Path, result: ProofResult) -> None:
     )
 
 
+def _warn_if_dirty(agent_revision: str) -> None:
+    """Flag uncommitted changes before a campaign run.
+
+    `agent_revision` is only as good as its promise that the same code ran
+    for every model — a `-dirty` checkout breaks that promise quietly, and
+    the whole point of campaign 2 is being able to show conditions were
+    equal. Warn rather than abort: a dirty stamp still beats no stamp, and
+    a single ad-hoc re-run isn't worth blocking.
+    """
+    if "-dirty" in agent_revision:
+        console.print(
+            "[yellow]Warning: uncommitted changes — this run's "
+            "agent_revision won't uniquely identify the code that produced "
+            "it. Commit before a campaign run.[/yellow]"
+        )
+
+
 def _prove_and_save_one(
     repo: SupabaseRepository,
     exercise: Exercise,
@@ -85,6 +120,8 @@ def _prove_and_save_one(
     max_isabelle_checks: int,
     use_cache: bool,
     build_timeout_seconds: int,
+    version: int,
+    agent_revision: str,
     max_empty_response_retries: int = 2,
     max_isabelle_queries: int = 5,
 ) -> bool:
@@ -121,7 +158,7 @@ def _prove_and_save_one(
     exercise_name = exercise.name
     assert exercise.statement is not None
 
-    cache_path = _cache_path(exercise_name, model_name)
+    cache_path = _cache_path(exercise_name, model_name, version)
     proof_result = _load_cached_result(cache_path) if use_cache else None
 
     run_id = uuid4()
@@ -137,6 +174,8 @@ def _prove_and_save_one(
             max_num_of_passes=max_isabelle_checks,
             run_id=run_id,
             pass_number=next(pass_numbers),
+            version=version,
+            agent_revision=agent_revision,
         )
 
     if proof_result is not None:
@@ -374,6 +413,14 @@ def run(
             "history can't recover within the same run)."
         ),
     ),
+    version: int = typer.Option(
+        BENCHMARK_VERSION,
+        help=(
+            "Benchmark campaign to write rows under. Only override this to "
+            "top up an older campaign; mixing campaigns in one analysis "
+            "compares results produced under different agent revisions."
+        ),
+    ),
 ) -> None:
     repo = SupabaseRepository()
     exercise = repo.read_as_exercise(exercise_name)
@@ -381,9 +428,16 @@ def run(
         console.print(f"[red]Exercise {exercise_name} has no statement.[/red]")
         raise typer.Exit(code=1)
 
+    agent_revision = current_agent_revision()
     console.print(
-        Panel(f"[bold]{exercise_name}[/bold]", title="Proving", border_style="blue")
+        Panel(
+            f"[bold]{exercise_name}[/bold]\n"
+            f"[dim]campaign v{version} · {agent_revision}[/dim]",
+            title="Proving",
+            border_style="blue",
+        )
     )
+    _warn_if_dirty(agent_revision)
 
     verified = _prove_and_save_one(
         repo,
@@ -394,6 +448,8 @@ def run(
         max_isabelle_checks,
         use_cache,
         build_timeout_seconds,
+        version,
+        agent_revision,
         max_empty_response_retries,
         max_isabelle_queries,
     )
@@ -449,12 +505,22 @@ def run_all(
             "history can't recover within the same run)."
         ),
     ),
+    version: int = typer.Option(
+        BENCHMARK_VERSION,
+        help=(
+            "Benchmark campaign to write rows under, and to resume against. "
+            "Only override this to top up an older campaign."
+        ),
+    ),
 ) -> None:
-    """Prove every exercise not yet benchmarked with `model_name`.
+    """Prove every exercise not yet benchmarked with `model_name` in this
+    campaign.
 
     Resumable: exercises that already have a `benchmark` row for this model
-    are skipped (via `get_missing_exercises_by_model`), so re-running after
-    an interruption or a handful of failures only retries what's left.
+    *in campaign `--version`* are skipped (via
+    `get_missing_exercises_by_model`), so re-running after an interruption or
+    a handful of failures only retries what's left — and a new campaign
+    starts from a full grid rather than seeing the previous one's coverage.
 
     That same call orders exercises no model has ever attempted before ones
     other models have already covered, so `--limit` (or an interrupted run)
@@ -462,12 +528,16 @@ def run_all(
     up repeat attempts on already-covered exercises.
     """
     repo = SupabaseRepository()
-    exercises = repo.get_missing_exercises_by_model(model_name)
+    agent_revision = current_agent_revision()
+    _warn_if_dirty(agent_revision)
+
+    exercises = repo.get_missing_exercises_by_model(model_name, version=version)
     if limit:
         exercises = exercises[:limit]
 
     console.print(
-        f"[blue]{len(exercises)} exercise(s) to prove with {model_name}[/blue]"
+        f"[blue]{len(exercises)} exercise(s) to prove with {model_name} "
+        f"(campaign v{version}, {agent_revision})[/blue]"
     )
 
     verified_count = 0
@@ -495,6 +565,8 @@ def run_all(
                 max_isabelle_checks,
                 use_cache,
                 build_timeout_seconds,
+                version,
+                agent_revision,
                 max_empty_response_retries,
                 max_isabelle_queries,
             )

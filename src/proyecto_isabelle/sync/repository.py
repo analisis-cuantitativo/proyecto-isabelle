@@ -132,6 +132,8 @@ class SupabaseRepository:
         max_num_of_passes: int,
         run_id: UUID,
         pass_number: int,
+        version: int,
+        agent_revision: str,
     ) -> None:
         """Persist one `benchmark` row for a single pass, immediately.
 
@@ -154,6 +156,12 @@ class SupabaseRepository:
         from a list position) — callers that also keep a local run log
         (``query/run_log.py``) should reuse the same ``run_id`` there, so the
         Supabase rows and the local log file refer to the same run.
+
+        ``version`` and ``agent_revision`` are likewise the caller's to supply
+        (from ``util.BENCHMARK_VERSION`` and
+        ``util.current_agent_revision()``), and must stay fixed for a whole
+        campaign — they're what makes rows from different campaigns separable
+        and each campaign's conditions auditable after the fact.
         """
         if exercise.id is None:
             raise ValueError("Exercise needs an id to be turned into a Benchmark row.")
@@ -164,6 +172,8 @@ class SupabaseRepository:
         )
 
         row = Benchmark(
+            version=version,
+            agent_revision=agent_revision,
             run_id=run_id,
             pass_number=pass_number,
             exercise_id=exercise.id,
@@ -242,9 +252,11 @@ class SupabaseRepository:
             raise ValueError(f"Exercise not found: {exercise_name}")
         return Exercise.model_validate(response.data[0])
 
-    def get_missing_exercises_by_model(self, model_name: str) -> list[Exercise]:
-        """Exercises `model_name` hasn't attempted yet, with exercises no
-        model has ever attempted sorted first.
+    def get_missing_exercises_by_model(
+        self, model_name: str, version: int
+    ) -> list[Exercise]:
+        """Exercises `model_name` hasn't attempted yet *in campaign `version`*,
+        with exercises no model has attempted in that campaign sorted first.
 
         `run_all` truncates this list with `--limit`, so the ordering matters:
         without it, a short/interrupted run would keep re-covering exercises
@@ -254,14 +266,37 @@ class SupabaseRepository:
         never-attempted-by-anyone exercises come before ones other models
         have already tried, and each of those two groups is alphabetical by
         exercise name.
+
+        `version` scopes all of that to one campaign, and isn't optional: a
+        campaign-2 run that saw campaign-1 rows would consider every exercise
+        already covered and return nothing at all, silently doing no work
+        instead of re-running the grid it was invoked to re-run.
+
+        Paginated via ``.range()`` for the same reason `list_benchmark_rows`
+        is: PostgREST caps an unpaginated response at `db.max_rows` (1000),
+        and a truncated read here makes already-attempted exercises look
+        never-attempted, so a resumed run re-proves them — burning tokens and
+        writing duplicate runs for exercises that were already covered.
         """
-        benchmark_response = (
-            self.client.table("benchmark").select("exercise_id, model_name").execute()
-        )
+        page_size = 1000
+        benchmark_rows: list[dict] = []
+        start = 0
+        while True:
+            response = (
+                self.client.table("benchmark")
+                .select("exercise_id, model_name")
+                .eq("version", version)
+                .range(start, start + page_size - 1)
+                .execute()
+            )
+            benchmark_rows.extend(response.data)
+            if len(response.data) < page_size:
+                break
+            start += page_size
 
         attempted_by_model: set[int] = set()
         attempted_by_any: set[int] = set()
-        for row in benchmark_response.data:
+        for row in benchmark_rows:
             attempted_by_any.add(row["exercise_id"])
             if row["model_name"] == model_name:
                 attempted_by_model.add(row["exercise_id"])
@@ -405,9 +440,16 @@ class SupabaseRepository:
         )
         return response.data
 
-    def list_benchmark_rows(self) -> list[dict]:
+    def list_benchmark_rows(self, version: int | None = None) -> list[dict]:
         """Raw ``{exercise_id, model_name, run_id, pass_number, verified,
-        hit_retry_budget}`` for every pass ever recorded, across all models.
+        hit_retry_budget, version}`` for every pass ever recorded, across all
+        models — or just campaign ``version``'s, when given.
+
+        ``version=None`` means every campaign, which is almost never what an
+        aggregate stat wants: campaigns ran under different agent revisions,
+        so pooling them averages incomparable results. Callers that report a
+        rate should pass an explicit ``version``; the column is selected
+        either way so a caller that does pool can at least see it happening.
 
         Dicts rather than ``Benchmark`` instances, and only these columns —
         the dashboard's aggregate stats page groups/counts over them and has
@@ -424,24 +466,23 @@ class SupabaseRepository:
         rows: list[dict] = []
         start = 0
         while True:
-            response = (
-                self.client.table("benchmark")
-                .select(
-                    "exercise_id, model_name, run_id, pass_number, verified, "
-                    "hit_retry_budget"
-                )
-                .range(start, start + page_size - 1)
-                .execute()
+            query = self.client.table("benchmark").select(
+                "exercise_id, model_name, run_id, pass_number, verified, "
+                "hit_retry_budget, version"
             )
+            if version is not None:
+                query = query.eq("version", version)
+            response = query.range(start, start + page_size - 1).execute()
             rows.extend(response.data)
             if len(response.data) < page_size:
                 break
             start += page_size
         return rows
 
-    def list_full_benchmark_rows(self) -> list[dict]:
+    def list_full_benchmark_rows(self, version: int | None = None) -> list[dict]:
         """Every `benchmark` column except `thy_content`, for every pass ever
-        recorded, across all models.
+        recorded, across all models — or just campaign ``version``'s, when
+        given (see `list_benchmark_rows` on why pooling campaigns misleads).
 
         Unlike `list_benchmark_rows` (used by the dashboard's lean coverage
         stats), this keeps `errors` and `tokens_consumed` — the columns the
@@ -456,17 +497,15 @@ class SupabaseRepository:
         rows: list[dict] = []
         start = 0
         while True:
-            response = (
-                self.client.table("benchmark")
-                .select(
-                    "id, run_id, pass_number, exercise_id, model_name, "
-                    "was_given_the_correct_thy_statement, verified, errors, "
-                    "max_num_of_passes, hit_retry_budget, tokens_consumed, "
-                    "created_at"
-                )
-                .range(start, start + page_size - 1)
-                .execute()
+            query = self.client.table("benchmark").select(
+                "id, run_id, pass_number, exercise_id, model_name, "
+                "was_given_the_correct_thy_statement, verified, errors, "
+                "max_num_of_passes, hit_retry_budget, tokens_consumed, "
+                "created_at, version, agent_revision"
             )
+            if version is not None:
+                query = query.eq("version", version)
+            response = query.range(start, start + page_size - 1).execute()
             rows.extend(response.data)
             if len(response.data) < page_size:
                 break

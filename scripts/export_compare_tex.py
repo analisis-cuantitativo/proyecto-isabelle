@@ -147,12 +147,23 @@ def render_tokens(models: list[str], full_rows: list[dict]) -> str:
     )
 
 
-def main(out: Path = typer.Option(DEFAULT_OUT, help="Destination .tex file.")) -> None:
+def main(
+    out: Path = typer.Option(DEFAULT_OUT, help="Destination .tex file."),
+    version: int = typer.Option(
+        0,
+        help=(
+            "Benchmark campaign to export (0 = all campaigns pooled). The "
+            "published tables came from campaign 1; pass --version 1 to "
+            "regenerate them unchanged once campaign 2 has rows."
+        ),
+    ),
+) -> None:
     repo = SupabaseRepository()
-    rows = repo.list_benchmark_rows()
+    scope = version or None
+    rows = repo.list_benchmark_rows(version=scope)
     models, matrix = _exercise_matrix(rows, repo.list_benchmarkable_exercises())
     out.with_name("tokens_modelos.tex").write_text(
-        render_tokens(models, repo.list_full_benchmark_rows())
+        render_tokens(models, repo.list_full_benchmark_rows(version=scope))
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render(models, matrix))

@@ -8,6 +8,17 @@ PROOFS_DIR = ROOT_DIR / "data" / "proofs"
 RUN_LOGS_DIR = ROOT_DIR / "data" / "run_logs"
 ANALYSIS_DIR = ROOT_DIR / "data" / "analysis"
 
+BENCHMARK_VERSION = 2
+"""Campaign new `benchmark` rows are written under.
+
+1 was the original run reported for OSE 26-4063-2026; 2 is the re-run under
+equalized conditions (one pinned agent revision for every model, models run
+one at a time so Isabelle build failures can't be resource contention, and a
+complete grid). Bump this for a third campaign rather than reusing 2 -- rows
+from different campaigns are not comparable, which is the whole point of
+`benchmark.version`.
+"""
+
 
 class Models(StrEnum):
     """Models available for the benchmark, as pydantic_ai ``"<provider>:<model>"``

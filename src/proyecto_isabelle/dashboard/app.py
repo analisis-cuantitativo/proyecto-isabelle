@@ -218,17 +218,23 @@ def show_run(request: Request, run_id: str) -> HTMLResponse:
 
 
 @app.get("/benchmark", response_class=HTMLResponse)
-def show_benchmark(request: Request, model: str | None = None) -> HTMLResponse:
+def show_benchmark(
+    request: Request, model: str | None = None, version: int | None = None
+) -> HTMLResponse:
     """Aggregate coverage/accuracy over the Supabase `benchmark` table.
 
     Unlike the run-log pages above, this one talks to Supabase directly —
     the local JSONL logs only cover runs made from this machine, while
     `benchmark` has every pass ever recorded for every model.
+
+    `?version=N` scopes the stats to one benchmark campaign; without it
+    every campaign is pooled, which mixes runs made against different agent
+    revisions.
     """
     try:
         repo = _get_repo()
         exercises = repo.list_benchmarkable_exercises()
-        rows = repo.list_benchmark_rows()
+        rows = repo.list_benchmark_rows(version=version)
     except Exception as e:
         return templates.TemplateResponse(
             request,
@@ -238,6 +244,7 @@ def show_benchmark(request: Request, model: str | None = None) -> HTMLResponse:
                 "stats": [],
                 "models": [],
                 "model": model,
+                "version": version,
                 "breakdown": None,
                 "total_exercises": 0,
             },
@@ -255,6 +262,7 @@ def show_benchmark(request: Request, model: str | None = None) -> HTMLResponse:
             "stats": stats,
             "models": models,
             "model": model,
+            "version": version,
             "breakdown": breakdown,
             "total_exercises": len(exercises),
         },
@@ -262,18 +270,23 @@ def show_benchmark(request: Request, model: str | None = None) -> HTMLResponse:
 
 
 @app.get("/compare", response_class=HTMLResponse)
-def show_compare(request: Request) -> HTMLResponse:
-    """Exercise-by-exercise comparison: one row per exercise, one column per model."""
+def show_compare(request: Request, version: int | None = None) -> HTMLResponse:
+    """Exercise-by-exercise comparison: one row per exercise, one column per model.
+
+    `?version=N` scopes the grid to one benchmark campaign (see
+    `show_benchmark`).
+    """
     context: dict[str, Any] = {
         "error": None,
         "models": [],
         "matrix": [],
         "solved_by_model": [],
+        "version": version,
     }
     try:
         repo = _get_repo()
         exercises = repo.list_benchmarkable_exercises()
-        rows = repo.list_benchmark_rows()
+        rows = repo.list_benchmark_rows(version=version)
     except Exception as e:
         context["error"] = str(e)
         return templates.TemplateResponse(request, "compare.html.jinja", context)
