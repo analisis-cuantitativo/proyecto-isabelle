@@ -479,6 +479,46 @@ class SupabaseRepository:
             start += page_size
         return rows
 
+    def list_campaign_rows(self) -> list[dict]:
+        """``{version, agent_revision, model_name, run_id, exercise_id,
+        created_at}`` for every pass ever recorded, across every campaign.
+
+        Deliberately unfiltered: this is what tells a caller *which*
+        campaigns exist and what conditions each one ran under (how many
+        runs, which models, which agent revisions, when) — the questions you
+        ask before picking a version to scope everything else to. The
+        dashboard renders it as a campaign picker + summary; the aggregation
+        lives there rather than here, like the other `list_*` readers.
+
+        Six narrow columns on purpose: a campaign summary needs identity and
+        counts, not `thy_content`/`errors`, and this one read is never scoped
+        down by a filter.
+
+        Paginated via ``.range()`` for the same reason as
+        `list_benchmark_rows` (PostgREST's 1000-row cap per response) —
+        truncation here would make a real campaign look smaller than it is,
+        or hide its second agent revision, which is exactly the thing the
+        summary exists to expose.
+        """
+        page_size = 1000
+        rows: list[dict] = []
+        start = 0
+        while True:
+            response = (
+                self.client.table("benchmark")
+                .select(
+                    "version, agent_revision, model_name, run_id, exercise_id, "
+                    "created_at"
+                )
+                .range(start, start + page_size - 1)
+                .execute()
+            )
+            rows.extend(response.data)
+            if len(response.data) < page_size:
+                break
+            start += page_size
+        return rows
+
     def list_full_benchmark_rows(self, version: int | None = None) -> list[dict]:
         """Every `benchmark` column except `thy_content`, for every pass ever
         recorded, across all models — or just campaign ``version``'s, when

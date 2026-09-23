@@ -1,0 +1,65 @@
+{#
+  What the numbers on this page are scoped to: which campaign, how much data
+  it has, and whether every pass in it came from the same code.
+
+  A campaign is only comparable with itself — rows from different campaigns
+  were produced by different agent revisions — so the scope is stated up
+  front instead of being something you'd have to infer from the URL.
+
+  Expects `version` (selected campaign, `None` = pooled), `campaign` (its
+  summary, or `None`) and `current_version`.
+#}
+{% if version is none %}
+<div class="campaign warn">
+  <strong>All campaigns pooled.</strong> These numbers average runs made
+  under different agent revisions, so they aren't a fair comparison between
+  models &mdash; pick a single campaign above for a rate you can report.
+</div>
+{% elif not campaign or not campaign.passes %}
+<div class="campaign warn">
+  <strong>Campaign v{{ version }} has no rows yet.</strong>
+  {% if version == current_version %}
+  This is the campaign new runs are written under &mdash; run
+  <code>scripts/run.py run-all</code> to start filling it, or pick an
+  earlier campaign above to see what's already been measured.
+  {% else %}
+  Nothing was ever recorded under this version.
+  {% endif %}
+</div>
+{% else %}
+<div class="campaign">
+  <strong>Campaign v{{ campaign.version }}{% if campaign.is_current %}
+    (current){% endif %}</strong>
+  &mdash; {{ campaign.passes }} pass(es) across {{ campaign.runs }} run(s),
+  {{ campaign.models | length }} model(s), {{ campaign.exercises }} exercise(s)
+  {%- if campaign.first_at %}, {{ campaign.first_at[:10] }} &rarr;
+  {{ campaign.last_at[:10] }}{% endif %}.
+  {% if not campaign.is_current %}
+  New runs are being written under v{{ current_version }}.
+  {% endif %}
+
+  <div class="revisions">
+    {% if not campaign.agent_revisions %}
+    Agent revision: <em>not recorded</em> &mdash; these rows predate the
+    <code>agent_revision</code> column, so what code produced them can't be
+    confirmed after the fact.
+    {% elif campaign.agent_revisions | length == 1 %}
+    Agent revision: <code>{{ campaign.agent_revisions[0] }}</code> &mdash;
+    every pass in this campaign came from the same code.
+    {% else %}
+    <span class="flag">{{ campaign.agent_revisions | length }} distinct agent
+    revisions</span> in this campaign: models did not all face the same
+    Isabelle interface, so differences between them are partly differences
+    in conditions.
+    <ul>
+      {% for r in campaign.agent_revisions %}<li><code>{{ r }}</code></li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if campaign.has_dirty_revision %}
+    <div class="flag">A revision above is marked <code>-dirty</code>: it ran
+    from a working tree with uncommitted changes, so it doesn't uniquely
+    identify the code that produced those passes.</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

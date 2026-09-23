@@ -192,6 +192,8 @@ def _prove_and_save_one(
             exercise_statement=exercise.statement,
             proof=exercise.proof if with_proof else None,
             max_isabelle_queries=max_isabelle_queries,
+            version=version,
+            agent_revision=agent_revision,
         )
         for check in proof_result.checks:
             on_check(check)
@@ -216,6 +218,8 @@ def _prove_and_save_one(
                 exercise_statement=exercise.statement,
                 proof=exercise.proof if with_proof else None,
                 max_isabelle_queries=max_isabelle_queries,
+                version=version,
+                agent_revision=agent_revision,
             )
             try:
                 proof_result = asyncio.run(

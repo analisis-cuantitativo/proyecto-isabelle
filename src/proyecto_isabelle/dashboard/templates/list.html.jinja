@@ -19,12 +19,24 @@
   nav a { margin-right: 1rem; }
   form.filters { margin: 0.8rem 0; }
   form.filters select { padding: 0.25rem 0.5rem; }
+  form.filters label + label { margin-left: 1rem; }
+  .campaign-cell { color: #555; font-size: 0.9em; }
+  .unstamped { color: #999; }
+  code { background: #f0f0f0; padding: 0 0.25rem; border-radius: 3px; }
 </style>
 </head>
 <body>
-<nav><a href="/">Runs</a><a href="/benchmark">Benchmark coverage</a><a href="/compare">Compare models</a></nav>
+<nav><a href="/?{{ version_arg }}">Runs</a><a href="/benchmark?{{ version_arg }}">Benchmark coverage</a><a href="/compare?{{ version_arg }}">Compare models</a><a href="/model-history{% if model %}?model={{ model }}{% endif %}">Model across campaigns</a></nav>
 <h1>Proof Agent Runs</h1>
 <form class="filters" method="get">
+  <label>Campaign:
+    <select name="version" onchange="this.form.submit()">
+      <option value="all" {% if version is none %}selected{% endif %}>All</option>
+      {% for v in versions %}
+      <option value="{{ v }}" {% if v == version %}selected{% endif %}>v{{ v }}{% if v == current_version %} (current){% endif %}</option>
+      {% endfor %}
+    </select>
+  </label>
   <label>Model:
     <select name="model" onchange="this.form.submit()">
       <option value="">All</option>
@@ -35,15 +47,21 @@
   </label>
 </form>
 {% if not runs %}
-<p>No runs logged{% if model %} for model <code>{{ model }}</code>{% endif %}.
+<p>No runs logged{% if model %} for model <code>{{ model }}</code>{% endif %}{% if version %}
+in campaign v{{ version }}{% endif %}.
 Run <code>scripts/run.py</code> to produce one.</p>
 {% else %}
 <table>
-<tr><th>Exercise</th><th>Model</th><th>Started</th><th>Status</th><th>Isabelle checks</th></tr>
+<tr><th>Exercise</th><th>Model</th><th>Campaign</th><th>Started</th><th>Status</th><th>Isabelle checks</th></tr>
 {% for run in runs %}
 <tr>
   <td><a href="/runs/{{ run.run_id }}">{{ run.exercise_name or run.run_id }}</a></td>
   <td>{{ run.model_name or "" }}</td>
+  <td class="campaign-cell">
+    {%- if run.version %}v{{ run.version }}
+      {%- if run.agent_revision %} <span title="{{ run.agent_revision }}">&#9432;</span>{% endif %}
+    {%- else %}<span class="unstamped" title="This log predates run_started recording the campaign">&ndash;</span>{% endif %}
+  </td>
   <td>{{ run.started_at or "" }}</td>
   <td>
     {% if run.running %}<span class="badge running">running</span>

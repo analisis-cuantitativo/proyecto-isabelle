@@ -59,7 +59,20 @@ class RunLogWriter:
         exercise_statement: str | None = None,
         proof: str | None = None,
         max_isabelle_queries: int | None = None,
+        version: int | None = None,
+        agent_revision: str | None = None,
     ) -> None:
+        """Open the log with the run's fixed facts.
+
+        ``version``/``agent_revision`` are the same campaign and revision the
+        run's `benchmark` rows get stamped with (see
+        ``SupabaseRepository.save_benchmark_pass``), repeated here so a log
+        file says on its own which campaign it belongs to — otherwise the
+        only way to place a run is to go back to Supabase and look up its
+        ``run_id``. Both default to ``None`` because logs written before this
+        existed simply don't have them, and a reader has to tell "not
+        recorded" apart from a real campaign.
+        """
         self.log_event(
             {
                 "type": "run_started",
@@ -67,6 +80,8 @@ class RunLogWriter:
                 "model_name": model_name,
                 "max_isabelle_checks": max_isabelle_checks,
                 "max_isabelle_queries": max_isabelle_queries,
+                "version": version,
+                "agent_revision": agent_revision,
                 "exercise_statement": exercise_statement,
                 "proof": proof,
             }

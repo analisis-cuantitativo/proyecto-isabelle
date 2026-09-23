@@ -1,0 +1,249 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{{ model or "Model" }} across campaigns</title>
+<style>
+  /*
+    Two color jobs, kept apart on purpose:
+      - the meters encode a *proportion* (how much of the grid this model
+        solved), so they use one blue hue stepped light->dark. One hue means
+        the comparison survives any form of color blindness, which a
+        green-vs-red split would not: those two measure ΔE 4.1 under deutan,
+        well under the ΔE 8 gate.
+      - the per-exercise cells encode *status* (verified / failed), and keep
+        the same green/red badges the other pages use, with the word always
+        spelled out beside the color.
+  */
+  :root {
+    --solved: #2a78d6;
+    --unsolved: #86b6ef;
+    --track: #e6e5e1;
+    --ink: #222;
+    --ink-muted: #898781;
+    --good: #0ca30c;
+    --critical: #d03b3b;
+  }
+  body { font-family: -apple-system, sans-serif; margin: 2rem; background: #fafafa; color: var(--ink); max-width: 1000px; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 1.5rem; }
+  th, td { text-align: left; padding: 0.4rem 0.8rem; border-bottom: 1px solid #ddd; }
+  th { color: #555; font-size: 0.85em; text-transform: uppercase; }
+  a { color: #0b5fff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { background: #f0f0f0; padding: 0 0.25rem; border-radius: 3px; }
+  nav { margin-bottom: 1rem; }
+  nav a { margin-right: 1rem; }
+  form.filters { margin: 0.8rem 0 1.4rem; }
+  form.filters select { padding: 0.25rem 0.5rem; }
+  form.filters label + label { margin-left: 1rem; }
+  .error { background: #fbe8e8; border: 1px solid #f0b8b8; border-radius: 6px; padding: 0.8rem 1rem; }
+  .hint { color: #555; }
+
+  /* Meters: one row per campaign, aligned so the bars can be read against
+     each other without a second scale. */
+  .meters { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 0.9rem 1.1rem; margin-bottom: 1.4rem; }
+  .legend { font-size: 0.85em; color: #52514e; margin-bottom: 0.8rem; }
+  .legend span { margin-right: 1rem; white-space: nowrap; }
+  .swatch { display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 2px; margin-right: 0.3rem; vertical-align: -1px; }
+  .swatch.solved { background: var(--solved); }
+  .swatch.unsolved { background: var(--unsolved); }
+  .swatch.track { background: var(--track); }
+  .meter-row { display: flex; align-items: center; gap: 0.8rem; margin: 0.5rem 0; }
+  .meter-label { width: 7rem; flex: none; font-weight: 600; }
+  .meter { flex: 1; height: 14px; background: var(--track); border-radius: 4px; display: flex; overflow: hidden; }
+  .meter .seg { height: 100%; }
+  .meter .seg + .seg { margin-left: 2px; }
+  .meter .seg:last-child { border-radius: 0 4px 4px 0; }
+  .meter .solved { background: var(--solved); }
+  .meter .unsolved { background: var(--unsolved); }
+  .meter-value { width: 21rem; flex: none; font-size: 0.85em; color: #52514e; text-align: right; }
+
+  /* Headline counts for the paired comparison — a handful of numbers reads
+     better as figures than as another chart. */
+  .kpis { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-bottom: 1rem; }
+  .kpi { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 0.6rem 0.9rem; min-width: 8.5rem; }
+  .kpi .value { font-size: 1.6rem; font-weight: 600; }
+  .kpi .label { font-size: 0.8em; color: #52514e; }
+  .kpi.fixed .value { color: var(--good); }
+  .kpi.regressed .value { color: var(--critical); }
+
+  .badge { padding: 0.15rem 0.6rem; border-radius: 4px; font-size: 0.85em; white-space: nowrap; }
+  .verified { background: #c8f0c8; }
+  .failed { background: #f8c8c8; }
+  .none { color: #999; }
+  .change { font-size: 0.85em; white-space: nowrap; }
+  .change.fixed { color: var(--good); font-weight: 600; }
+  .change.regressed { color: var(--critical); font-weight: 600; }
+  .change.only_a, .change.only_b { color: #52514e; }
+  .change.stable_verified, .change.stable_failed { color: var(--ink-muted); }
+  .note { background: #fff; border: 1px solid #ddd; border-left: 4px solid #0b5fff; border-radius: 6px; padding: 0.7rem 1rem; margin-bottom: 1.2rem; font-size: 0.92em; }
+  .note.warn { border-left-color: #e0a100; background: #fffaf0; }
+</style>
+</head>
+<body>
+<nav>
+  <a href="/">&larr; runs</a>
+  <a href="/benchmark">Benchmark coverage</a>
+  <a href="/compare">Compare models</a>
+  <a href="/model-history">Model across campaigns</a>
+</nav>
+<h1>Model across campaigns</h1>
+
+{% if error %}
+<div class="error">
+  <p>Couldn't read the <code>benchmark</code> table from Supabase:</p>
+  <pre>{{ error }}</pre>
+</div>
+{% else %}
+
+<p class="hint">How one model's results changed from one benchmark campaign to
+the next. Campaigns ran under different agent revisions, so this is the one
+view that reads across them — the other pages deliberately stay inside one.</p>
+
+<form class="filters" method="get">
+  <label>Model:
+    <select name="model" onchange="this.form.submit()">
+      <option value="">Pick a model…</option>
+      {% for m in models %}
+      <option value="{{ m }}" {% if m == model %}selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% if versions | length > 1 %}
+  <label>Compare:
+    <select name="a" onchange="this.form.submit()">
+      {% for v in versions %}
+      <option value="{{ v }}" {% if v == a %}selected{% endif %}>v{{ v }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>with:
+    <select name="b" onchange="this.form.submit()">
+      {% for v in versions %}
+      <option value="{{ v }}" {% if v == b %}selected{% endif %}>v{{ v }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+</form>
+
+{% if not model %}
+<p>Pick a model above to see how it did in each campaign.</p>
+{% elif not meters %}
+<p>No benchmark rows for <code>{{ model }}</code> in any campaign.</p>
+{% else %}
+
+<h2>{{ model }}</h2>
+
+<div class="meters">
+  <div class="legend">
+    Share of all {{ meters[0].total }} benchmarkable exercises &mdash;
+    <span><i class="swatch solved"></i>solved</span>
+    <span><i class="swatch unsolved"></i>attempted, not solved</span>
+    <span><i class="swatch track"></i>never attempted</span>
+  </div>
+  {% for m in meters %}
+  <div class="meter-row">
+    <div class="meter-label">v{{ m.version }}{% if m.version == current_version %} (current){% endif %}</div>
+    <div class="meter" title="v{{ m.version }}: solved {{ m.verified }}, attempted but not solved {{ m.attempted - m.verified }}, never attempted {{ m.total - m.attempted }}">
+      {% if m.verified_pct %}<span class="seg solved" style="width: {{ m.verified_pct }}%"></span>{% endif %}
+      {% if m.unsolved_pct %}<span class="seg unsolved" style="width: {{ m.unsolved_pct }}%"></span>{% endif %}
+    </div>
+    <div class="meter-value">
+      {{ m.verified }} solved of {{ m.attempted }} attempted
+      ({{ m.accuracy_pct }}% accuracy, {{ m.runs }} run(s))
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if not comparison %}
+<p class="hint">{{ model }} only has rows in one campaign, so there's nothing to
+compare yet.</p>
+{% else %}
+
+{% set ca = campaigns | selectattr("version", "equalto", comparison.a) | first %}
+{% set cb = campaigns | selectattr("version", "equalto", comparison.b) | first %}
+{% if ca and cb %}
+<div class="note{% if not ca.agent_revisions or not cb.agent_revisions or ca.agent_revisions == cb.agent_revisions %} warn{% endif %}">
+  <strong>v{{ comparison.a }} &rarr; v{{ comparison.b }}.</strong>
+  {% if not ca.agent_revisions or not cb.agent_revisions %}
+  One of these campaigns has no <code>agent_revision</code> recorded, so what
+  changed between them can't be pinned to a specific code change &mdash; treat
+  the differences below as "something changed", not as a measured effect.
+  {% elif ca.agent_revisions == cb.agent_revisions %}
+  Both campaigns ran on the same agent revision
+  (<code>{{ ca.agent_revisions[0] }}</code>), so differences here are run-to-run
+  variance, not the effect of a code change.
+  {% else %}
+  v{{ comparison.a }} ran on {% for r in ca.agent_revisions %}<code>{{ r }}</code>{% if not loop.last %}, {% endif %}{% endfor %};
+  v{{ comparison.b }} on {% for r in cb.agent_revisions %}<code>{{ r }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="kpis">
+  <div class="kpi">
+    <div class="value">{{ comparison.common }}</div>
+    <div class="label">attempted in both</div>
+  </div>
+  <div class="kpi">
+    <div class="value">{{ comparison.solved_a }} &rarr; {{ comparison.solved_b }}</div>
+    <div class="label">solved, of those</div>
+  </div>
+  <div class="kpi fixed">
+    <div class="value">&uarr; {{ comparison.counts.fixed }}</div>
+    <div class="label">newly solved in v{{ comparison.b }}</div>
+  </div>
+  <div class="kpi regressed">
+    <div class="value">&darr; {{ comparison.counts.regressed }}</div>
+    <div class="label">no longer solved</div>
+  </div>
+  <div class="kpi">
+    <div class="value">{{ comparison.counts.only_b }} / {{ comparison.counts.only_a }}</div>
+    <div class="label">only in v{{ comparison.b }} / only in v{{ comparison.a }}</div>
+  </div>
+</div>
+
+<p class="hint">The headline counts cover only the
+{{ comparison.common }} exercise(s) <em>both</em> campaigns attempted: an
+exercise one campaign never got to is a coverage difference, not a result that
+got better or worse. Exercises only one campaign touched are listed below, but
+kept out of those counts.</p>
+
+<table>
+<tr>
+  <th>Exercise</th>
+  <th>v{{ comparison.a }}</th>
+  <th>v{{ comparison.b }}</th>
+  <th>Change</th>
+</tr>
+{% for row in comparison.rows %}
+<tr>
+  <td>{{ row.name }}</td>
+  {% for cell in (row.before, row.after) %}
+  <td>
+    {% if not cell %}<span class="none">not attempted</span>
+    {% elif cell.verified %}<span class="badge verified">verified</span> ({{ cell.num_runs }})
+    {% else %}<span class="badge failed">failed</span> ({{ cell.num_runs }})
+    {% endif %}
+  </td>
+  {% endfor %}
+  <td class="change {{ row.change }}">
+    {% if row.change == "fixed" %}&uarr; newly solved
+    {% elif row.change == "regressed" %}&darr; no longer solved
+    {% elif row.change == "only_b" %}new in v{{ comparison.b }}
+    {% elif row.change == "only_a" %}not re-attempted
+    {% elif row.change == "stable_verified" %}unchanged
+    {% else %}still unsolved
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</table>
+
+{% endif %}
+{% endif %}
+{% endif %}
+</body>
+</html>

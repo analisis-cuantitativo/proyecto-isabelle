@@ -24,11 +24,33 @@
   .exercise h2 { margin: 0 0 0.4rem; font-size: 1em; }
   .exercise section + section { margin-top: 0.8rem; }
   nav a { margin-right: 1rem; }
+  .campaign { background: #fff; border: 1px solid #ddd; border-left: 4px solid #0b5fff; border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.8rem 0 1.2rem; font-size: 0.92em; }
+  .campaign.warn { border-left-color: #e0a100; background: #fffaf0; }
+  .campaign code { background: #f0f0f0; padding: 0 0.25rem; border-radius: 3px; }
 </style>
 </head>
 <body>
-<nav><a href="/">&larr; all runs</a><a href="/benchmark">Benchmark coverage</a><a href="/compare">Compare models</a></nav>
+<nav><a href="/">&larr; all runs</a>{% if version %}<a href="/benchmark?version={{ version }}">Benchmark coverage</a><a href="/compare?version={{ version }}">Compare models</a>{% else %}<a href="/benchmark">Benchmark coverage</a><a href="/compare">Compare models</a>{% endif %}<a href="/model-history">Model across campaigns</a></nav>
 <h1>Run {{ run_id }}</h1>
+
+{% if version %}
+<div class="campaign">
+  Recorded under <strong>campaign v{{ version }}</strong>{% if version != current_version %}
+  (new runs now go to v{{ current_version }}){% endif %}.
+  {% if agent_revision %}
+  Agent revision: <code>{{ agent_revision }}</code>{% if "-dirty" in agent_revision %}
+  &mdash; uncommitted changes were present, so this stamp doesn't uniquely
+  identify the code that ran{% endif %}.
+  {% endif %}
+</div>
+{% elif events %}
+<div class="campaign warn">
+  No campaign recorded for this run &mdash; the log predates
+  <code>run_started</code> carrying <code>version</code>/<code>agent_revision</code>.
+  Its <code>benchmark</code> rows still have both; the
+  <a href="/benchmark">coverage page</a> reads them from there.
+</div>
+{% endif %}
 
 {% if events is none %}
 <p>No local log for this run — it predates cache-hit replays being logged

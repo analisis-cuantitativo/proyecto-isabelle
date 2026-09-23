@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Compare models</title>
+<title>Compare models{% if version %} — v{{ version }}{% endif %}</title>
 <style>
   body { font-family: -apple-system, sans-serif; margin: 2rem; background: #fafafa; color: #222; }
   table { border-collapse: collapse; margin-bottom: 1.5rem; }
@@ -18,12 +18,27 @@
   .none { color: #999; }
   nav { margin-bottom: 1rem; }
   nav a { margin-right: 1rem; }
+  .campaign { background: #fff; border: 1px solid #ddd; border-left: 4px solid #0b5fff; border-radius: 6px; padding: 0.7rem 1rem; margin-bottom: 1.2rem; font-size: 0.92em; }
+  .campaign.warn { border-left-color: #e0a100; background: #fffaf0; }
+  .campaign .revisions { margin-top: 0.4rem; color: #555; }
+  .campaign ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+  .campaign .flag { color: #a35b00; font-weight: 600; }
+  code { background: #f0f0f0; padding: 0 0.25rem; border-radius: 3px; }
+  form.filters { margin: 0.8rem 0; }
+  form.filters select { padding: 0.25rem 0.5rem; }
   .error { background: #fbe8e8; border: 1px solid #f0b8b8; border-radius: 6px; padding: 0.8rem 1rem; max-width: 900px; }
 </style>
 </head>
 <body>
-<nav><a href="/">&larr; runs</a><a href="/benchmark">Benchmark coverage</a><a href="/compare">Compare models</a></nav>
+<nav><a href="/?{{ version_arg }}">&larr; runs</a><a href="/benchmark?{{ version_arg }}">Benchmark coverage</a><a href="/compare?{{ version_arg }}">Compare models</a><a href="/model-history{% if model %}?model={{ model }}{% endif %}">Model across campaigns</a></nav>
 <h1>Compare models</h1>
+
+{% if not error %}
+{% include "_campaign_bar.html.jinja" %}
+<form class="filters" method="get">
+  {% include "_campaign_select.html.jinja" %}
+</form>
+{% endif %}
 
 {% if error %}
 <div class="error">
@@ -33,7 +48,7 @@
   <code>SUPABASE_EMAIL</code> and <code>SUPABASE_PASSWORD</code> in <code>.env</code>.</p>
 </div>
 {% elif not models %}
-<p>No benchmark rows yet.</p>
+<p>No benchmark rows{% if version %} for campaign v{{ version }}{% endif %} yet.</p>
 {% else %}
 <p>One row per exercise, one column per model. A cell is <em>verified</em> if
 any of that model's runs on the exercise ended with a verified final pass;
@@ -42,7 +57,7 @@ the number in parentheses is how many runs there were.</p>
 <thead>
 <tr>
   <th>Exercise</th>
-  {% for m in models %}<th class="cell"><a href="/benchmark?model={{ m }}">{{ m }}</a></th>{% endfor %}
+  {% for m in models %}<th class="cell"><a href="/benchmark?model={{ m }}&amp;{{ version_arg }}">{{ m }}</a></th>{% endfor %}
 </tr>
 </thead>
 <tbody>

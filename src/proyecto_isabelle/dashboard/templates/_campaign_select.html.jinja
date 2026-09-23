@@ -1,0 +1,22 @@
+{#
+  Campaign picker. Rendered *inside* each page's own filters <form> rather
+  than carrying its own, so submitting it keeps that page's other filters
+  (the model select) instead of silently resetting them.
+
+  Expects `campaigns` (see `dashboard.app._campaigns`) and the selected
+  `version` — `None` meaning every campaign pooled.
+#}
+<label>Campaign:
+  <select name="version" onchange="this.form.submit()">
+    {% for c in campaigns %}
+    <option value="{{ c.version }}" {% if c.version == version %}selected{% endif %}>
+      v{{ c.version }}{% if c.is_current %} (current){% endif %} &mdash;
+      {%- if c.passes %} {{ c.runs }} run(s), {{ c.models | length }} model(s)
+      {%- else %} no rows yet{% endif %}
+    </option>
+    {% endfor %}
+    <option value="all" {% if version is none %}selected{% endif %}>
+      All campaigns (pooled)
+    </option>
+  </select>
+</label>
