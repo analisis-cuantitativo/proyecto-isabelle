@@ -3,6 +3,21 @@ services:
     build:
       context: ./DeepIsaHOL
       dockerfile: Dockerfile
+      # Explicit local cache export/import for the ~40min HOL-Analysis/
+      # Probability/Benchmark heap build below. Without this, that layer's
+      # cache lives only in Docker Desktop's own buildkit store, which caps
+      # ALL local-COPY-sourced cache (across every project on the machine,
+      # not just this one) at ~2.7GiB by default — small enough that other
+      # builds rotate this one out within the hour, forcing a full heap
+      # rebuild on the next `docker compose build deepisahol` even when
+      # nothing in benchmark/ changed. `mode=max` is required (not the
+      # default `min`) because the heap build runs in the discarded
+      # `builder` stage, not the final image — `min` only ever exports
+      # cache for layers that make it into the final image.
+      cache_from:
+        - type=local,src=${HOME}/.cache/docker-buildx/deepisahol
+      cache_to:
+        - type=local,dest=${HOME}/.cache/docker-buildx/deepisahol,mode=max
       args:
         # Benchmark heap-build parallelism. Empty THREADS => auto (all CPUs the
         # build sees, capped by RAM). Override via the shell or a .env file, e.g.
