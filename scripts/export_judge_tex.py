@@ -50,9 +50,15 @@ def _esc(s: str) -> str:
     return "".join(_ESCAPES.get(c, c) for c in s)
 
 
-def load_current() -> list[dict]:
-    """Cached verdicts for the runs' current verified final passes."""
-    current = {int(i) for i in rows_to_judge(SupabaseRepository())["id"]}
+def load_current(version: int | None = None) -> list[dict]:
+    """Cached verdicts for the runs' current verified final passes.
+
+    ``version`` scopes to one benchmark campaign (``None`` pools every
+    campaign -- see ``formalization_judge.rows_to_judge``).
+    """
+    current = {
+        int(i) for i in rows_to_judge(SupabaseRepository(), version=version)["id"]
+    }
     rows = [json.loads(line) for line in CACHE_PATH.read_text().splitlines() if line]
     return [r for r in rows if r["benchmark_id"] in current]
 
@@ -136,8 +142,17 @@ def render_fidelity(rows: list[dict]) -> str:
     )
 
 
-def main(out: Path = typer.Option(DEFAULT_OUT, help="Destination .tex file.")) -> None:
-    current = load_current()
+def main(
+    out: Path = typer.Option(DEFAULT_OUT, help="Destination .tex file."),
+    version: int = typer.Option(
+        0,
+        help=(
+            "Benchmark campaign to export (0 = all campaigns pooled). Pass "
+            "--version 2 to scope the fidelity tables to the current campaign."
+        ),
+    ),
+) -> None:
+    current = load_current(version=version or None)
     rows = [r for r in current if r["category"] != "exact_match"]
     rows.sort(
         key=lambda r: (

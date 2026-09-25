@@ -158,7 +158,7 @@ def _append_cache(record: dict) -> None:
         f.flush()
 
 
-def rows_to_judge(repo: SupabaseRepository) -> pd.DataFrame:
+def rows_to_judge(repo: SupabaseRepository, version: int | None = None) -> pd.DataFrame:
     """One row per run's true final pass, restricted to ``verified=True``:
     ``id, run_id, exercise_id, model_name, name, statement, source_title,
     thy_content``.
@@ -169,6 +169,11 @@ def rows_to_judge(repo: SupabaseRepository) -> pd.DataFrame:
     unverified — see ``analysis.integrity`` — is correctly excluded here
     too, instead of this module mistaking an earlier, superseded verified
     pass for the run's answer.
+
+    ``version`` scopes to one benchmark campaign, same as
+    ``analysis.data.load_benchmark_passes``. ``None`` pools every campaign,
+    which mixes runs made against different agent revisions -- callers that
+    want one campaign's fidelity numbers should pass an explicit version.
     """
     from proyecto_isabelle.analysis.data import (
         final_passes,
@@ -176,7 +181,7 @@ def rows_to_judge(repo: SupabaseRepository) -> pd.DataFrame:
         load_exercises,
     )
 
-    passes = load_benchmark_passes(repo)
+    passes = load_benchmark_passes(repo, version=version)
     finals = final_passes(passes)
     verified_finals = finals.loc[finals["verified"]].copy()
 
