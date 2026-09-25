@@ -12,19 +12,13 @@ from proyecto_isabelle.parse import thy
 DEFAULT_TIMEOUT = 60
 DEFAULT_PARENT_SESSION = "Benchmark"
 
-# Sibling library sessions bundled into the DeepIsaHOL image's `Benchmark` heap.
-# They are declared in the generated ROOT so a submitted theory can `imports` any
-# of them without triggering an on-the-fly session build.
-BENCHMARK_SIBLING_SESSIONS = (
-    "HOL-Number_Theory",
-    "HOL-Algebra",
-    "HOL-Combinatorics",
-    "HOL-Cardinals",
-    "HOL-Computational_Algebra",
-    "HOL-Decision_Procs",
-    "HOL-Real_Asymp",
-    "HOL-Eisbach",
-)
+# Per-`api_url` cache of the connected server's actual `Benchmark` composition
+# (DEEPISAHOL_PARENT_SESSION / DEEPISAHOL_EXTRA_SESSIONS at that server's
+# Docker build time), fetched from `/sessions` -- see `_benchmark_sessions`.
+# Cached for the process lifetime: a running server's image doesn't change
+# composition without a redeploy, and refetching on every build call would
+# double the request count for no benefit.
+_session_info_cache: dict[str, list[str]] = {}
 
 Mode = Literal["build", "verify"]
 
@@ -181,10 +175,33 @@ def _format_build_error(err: dict) -> str:
     return f"{prefix}{err.get('message', '')}".strip()
 
 
-def _make_root(session_name: str, parent_session: str, theory_name: str) -> str:
+def _benchmark_sessions(api_url: str) -> list[str]:
+    """Sibling sessions the connected server's `Benchmark` heap actually
+    bundles, fetched from `/sessions` and cached per `api_url`. Hardcoding
+    this list would silently drift from whatever the deployed image was
+    actually built with (see DEEPISAHOL_EXTRA_SESSIONS in the Dockerfile)."""
+    if api_url not in _session_info_cache:
+        with httpx.Client(timeout=DEFAULT_TIMEOUT) as client:
+            try:
+                resp = client.get(f"{api_url.rstrip('/')}/sessions")
+                resp.raise_for_status()
+            except (ConnectionError, httpx.HTTPError) as e:
+                raise RuntimeError(
+                    "Couldn't fetch /sessions from the DeepIsaHOL server to "
+                    "determine which library sessions its Benchmark heap "
+                    "bundles."
+                ) from e
+        data = resp.json()
+        _session_info_cache[api_url] = list(data.get("extra_sessions") or [])
+    return _session_info_cache[api_url]
+
+
+def _make_root(
+    session_name: str, parent_session: str, theory_name: str, extra_sessions: list[str]
+) -> str:
     sessions_block = ""
-    if parent_session == DEFAULT_PARENT_SESSION:
-        listed = "\n".join(f'    "{s}"' for s in BENCHMARK_SIBLING_SESSIONS)
+    if parent_session == DEFAULT_PARENT_SESSION and extra_sessions:
+        listed = "\n".join(f'    "{s}"' for s in extra_sessions)
         sessions_block = f"  sessions\n{listed}\n"
     return (
         f'session {session_name} = "{parent_session}" +\n'
@@ -290,9 +307,14 @@ def _run_build(
 ) -> IsabelleResponse:
     theory_name = extract_theory_name(content)
     session_name = f"Sub_{uuid4().hex[:12]}"
+    extra_sessions = (
+        _benchmark_sessions(api_url) if parent_session == DEFAULT_PARENT_SESSION else []
+    )
     payload = {
         "session_name": session_name,
-        "root_content": _make_root(session_name, parent_session, theory_name),
+        "root_content": _make_root(
+            session_name, parent_session, theory_name, extra_sessions
+        ),
         "theory_files": {f"{theory_name}.thy": content},
         "timeout_seconds": max(1, min(timeout_seconds, 7200)),
         "options": build_options,

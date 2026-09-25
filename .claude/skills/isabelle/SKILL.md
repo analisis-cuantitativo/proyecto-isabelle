@@ -25,6 +25,41 @@ pointing at something else. If the server isn't reachable, `query_content`
 raises a `RuntimeError` telling you to run `docker compose up`; don't work
 around that by fabricating a result.
 
+## Check which libraries the server actually has before you start
+
+The `Benchmark` heap's composition is configurable per deployment and
+defaults to bare `HOL` — no Analysis, Probability, Algebra, etc. (see
+`DEEPISAHOL_PARENT_SESSION` / `DEEPISAHOL_EXTRA_SESSIONS` in the root
+`README.md`, "Configurando qué librerías de Isabelle se compilan"). Before
+drafting a skeleton, check `GET {api_url}/sessions` (or just read what
+`query_content` needs — it calls this for you internally) to see what's
+already bundled, rather than assuming any particular library is there.
+
+If the exercise you're about to formalize clearly needs something outside
+what's bundled — real analysis (limits, derivatives, integrals) needs
+`HOL-Analysis`, probability needs `HOL-Probability`, number theory needs
+`HOL-Number_Theory`, abstract algebra needs `HOL-Algebra`, and so on (full
+table in the README section above) — don't just try it and let the build
+fail on a missing `imports`. Two cases:
+
+- **It's obvious from the statement** (e.g. a problem about continuity
+  obviously needs `HOL-Analysis`): say so and propose the specific
+  `DEEPISAHOL_EXTRA_SESSIONS`/parent change up front, before spending build
+  calls on something that can't possibly resolve.
+- **It's ambiguous, or you're about to formalize a whole batch of exercises
+  with mixed needs**: ask the user which sessions to include rather than
+  guessing — getting this wrong either wastes their time on a rebuild for
+  the wrong set, or silently narrows what you can even attempt.
+
+Rebuilding to add a session is a real, potentially expensive Docker build
+(seconds for `HOL`-only, up to ~1-2h for the old full Analysis/Probability
+set) — this is not something to kick off on your own initiative. Confirm
+with the user first, the same as any other slow/resource-heavy action; once
+they approve, the change is `docker compose build deepisahol` with the new
+build args, then restarting the service. `GET /sessions` reflects the new
+composition automatically the moment the rebuilt container is up — no
+separate step needed after that.
+
 ## Call the existing client, don't hand-roll HTTP
 
 There's already a Python client with unicode normalization, ROOT-file
@@ -46,11 +81,17 @@ thing without reading it yourself first.
 ## Two modes — prefer `build`
 
 - **`mode="build"` (default).** Runs a real `isabelle build` against the
-  prebuilt `Benchmark` heap, which already bundles `HOL-Number_Theory`,
-  `HOL-Algebra`, `HOL-Combinatorics`, `HOL-Cardinals`,
-  `HOL-Computational_Algebra`, `HOL-Decision_Procs`, `HOL-Real_Asymp`, and
-  `HOL-Eisbach` as sibling sessions — `imports` any of those directly, no
-  separate build wait. This is the mode with the actual safety net: it
+  prebuilt `Benchmark` heap. *Which* libraries that heap bundles is
+  configurable per deployment (`DEEPISAHOL_PARENT_SESSION` /
+  `DEEPISAHOL_EXTRA_SESSIONS` at the server's Docker build time — see the
+  root `README.md`, "Configurando qué librerías de Isabelle se compilan").
+  Don't assume a library is available; check the running server with
+  `GET /sessions` (or `proyecto_isabelle.query.isabelle._benchmark_sessions`,
+  which the client already calls automatically to know what it can put in a
+  generated `sessions` clause). A theory's `imports` only resolves instantly
+  if the referenced session is one of those already bundled — anything else
+  triggers an on-the-fly build or fails outright. This is the mode with the
+  actual safety net: it
   rejects `verified=True` if the content still contains `sorry`/`oops`, uses
   `axiomatization`/`axioms` to assert the goal instead of deriving it, or
   submits no `lemma`/`theorem` statement at all (see `_incomplete_commands`
@@ -100,7 +141,9 @@ Two flags matter on `mode="build"`:
 - Self-contained: one theory per file, `imports Main` at minimum, plus only
   the libraries the statement actually needs (`Complex_Main`,
   `"HOL-Analysis.Analysis"`, `"HOL-Probability.Probability"`, or any of the
-  `Benchmark` siblings listed above).
+  `Benchmark` siblings the running server reports at `GET /sessions`). If the
+  server was built with the default minimal profile (bare `HOL`, no extras),
+  none of those are available — check first rather than assuming.
 - Use ASCII notation (`<Rightarrow>`, `<longleftrightarrow>`, `<exists>`,
   `<forall>`, `<and>`, `<or>`, `<noteq>`, `<Longrightarrow>`, ...) instead of
   unicode symbols — the client normalizes common cases
