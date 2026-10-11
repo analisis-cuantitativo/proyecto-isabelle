@@ -272,8 +272,31 @@ def _exercise_breakdown(
     return sorted(breakdown, key=lambda b: b["name"])
 
 
+PREVIEW_LINES = 12
+
+
+def _proof_previews(rows: list[dict[str, Any]]) -> dict[tuple[int, str], str]:
+    """Per exercise+model cell, the first ``PREVIEW_LINES`` lines of one
+    run's final proof, for the compare grid's hover popover. Prefers a
+    verified run, matching the cell's "verified if any run verified" rule.
+    """
+    chosen: dict[tuple[int, str], dict[str, Any]] = {}
+    for f in _final_passes_by_run(rows):
+        key = (f["exercise_id"], f["model_name"])
+        if key not in chosen or (f["verified"] and not chosen[key]["verified"]):
+            chosen[key] = f
+    previews = {}
+    for key, f in chosen.items():
+        lines = f["thy_content"].splitlines()
+        text = "\n".join(lines[:PREVIEW_LINES])
+        previews[key] = text + ("\n…" if len(lines) > PREVIEW_LINES else "")
+    return previews
+
+
 def _exercise_matrix(
-    rows: list[dict[str, Any]], exercises: list[dict[str, Any]]
+    rows: list[dict[str, Any]],
+    exercises: list[dict[str, Any]],
+    previews: dict[tuple[int, str], str] | None = None,
 ) -> tuple[list[str], list[dict[str, Any]]]:
     """Exercises × models grid: each cell is attempted / verified / # of runs.
 
@@ -282,6 +305,7 @@ def _exercise_matrix(
     columns) and one row per exercise (sorted by name) whose ``cells`` line
     up with those columns.
     """
+    previews = previews or {}
     cells: dict[tuple[int, str], dict[str, Any]] = {}
     for f in _final_passes_by_run(rows):
         cell = cells.setdefault(
@@ -296,7 +320,13 @@ def _exercise_matrix(
         {
             "id": ex["id"],
             "name": ex["name"],
-            "cells": [cells.get((ex["id"], m), empty) for m in models],
+            "cells": [
+                {
+                    **cells.get((ex["id"], m), empty),
+                    "preview": previews.get((ex["id"], m)),
+                }
+                for m in models
+            ],
         }
         for ex in sorted(exercises, key=lambda ex: ex["name"])
     ]
@@ -612,7 +642,11 @@ def show_compare(request: Request, version: str | None = None) -> HTMLResponse:
         context["error"] = str(e)
         return templates.TemplateResponse(request, "compare.html.jinja", context)
 
-    models, matrix = _exercise_matrix(rows, exercises)
+    models, matrix = _exercise_matrix(
+        rows,
+        exercises,
+        _proof_previews(repo.list_pass_proofs(version=selected_version)),
+    )
     context.update(
         models=models,
         matrix=matrix,

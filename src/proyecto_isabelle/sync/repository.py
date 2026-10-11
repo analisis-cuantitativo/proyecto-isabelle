@@ -504,6 +504,28 @@ class SupabaseRepository:
             query = query.eq("version", version)
         return query.order("pass_number").execute().data
 
+    def list_pass_proofs(self, version: int | None = None) -> list[dict]:
+        """``{exercise_id, model_name, run_id, pass_number, verified,
+        thy_content}`` for every pass, optionally scoped to campaign
+        ``version``. Heavy (carries the proof text) -- only for the compare
+        page's hover previews; paginated like `list_benchmark_rows`.
+        """
+        page_size = 1000
+        rows: list[dict] = []
+        start = 0
+        while True:
+            query = self.client.table("benchmark").select(
+                "exercise_id, model_name, run_id, pass_number, verified, thy_content"
+            )
+            if version is not None:
+                query = query.eq("version", version)
+            response = query.range(start, start + page_size - 1).execute()
+            rows.extend(response.data)
+            if len(response.data) < page_size:
+                break
+            start += page_size
+        return rows
+
     def list_campaign_rows(self) -> list[dict]:
         """``{version, agent_revision, model_name, run_id, exercise_id,
         created_at}`` for every pass ever recorded, across every campaign.
