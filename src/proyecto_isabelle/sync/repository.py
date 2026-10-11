@@ -479,6 +479,31 @@ class SupabaseRepository:
             start += page_size
         return rows
 
+    def list_passes_for_cell(
+        self, exercise_id: int, model_name: str, version: int | None = None
+    ) -> list[dict]:
+        """Every pass (with ``thy_content`` and ``errors``) one model made on
+        one exercise, optionally scoped to campaign ``version``.
+
+        The dashboard's solution page is the one consumer that needs the
+        proof text, so it reads it for a single exercise+model cell rather
+        than widening `list_benchmark_rows` (which stays lean on purpose).
+        A cell has a handful of runs at most, so no pagination.
+        """
+        query = (
+            self.client.table("benchmark")
+            .select(
+                "run_id, pass_number, thy_content, verified, errors, "
+                "tokens_consumed, hit_retry_budget, "
+                "was_given_the_correct_thy_statement, version, created_at"
+            )
+            .eq("exercise_id", exercise_id)
+            .eq("model_name", model_name)
+        )
+        if version is not None:
+            query = query.eq("version", version)
+        return query.order("pass_number").execute().data
+
     def list_campaign_rows(self) -> list[dict]:
         """``{version, agent_revision, model_name, run_id, exercise_id,
         created_at}`` for every pass ever recorded, across every campaign.

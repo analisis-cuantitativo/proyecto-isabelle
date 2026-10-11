@@ -48,4 +48,5 @@ dev = [
     "ipykernel>=7.2.0",
     "ipython>=9.0.0",
     "pyright>=1.1.408",
+    "snakeviz>=2.2.2",
 ]

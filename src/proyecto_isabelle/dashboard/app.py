@@ -294,6 +294,7 @@ def _exercise_matrix(
     empty = {"num_runs": 0, "verified": False}
     matrix = [
         {
+            "id": ex["id"],
             "name": ex["name"],
             "cells": [cells.get((ex["id"], m), empty) for m in models],
         }
@@ -621,6 +622,66 @@ def show_compare(request: Request, version: str | None = None) -> HTMLResponse:
         ],
     )
     return templates.TemplateResponse(request, "compare.html.jinja", context)
+
+
+@app.get("/compare/solution", response_class=HTMLResponse)
+def show_solution(
+    request: Request, exercise_id: int, model: str, version: str | None = None
+) -> HTMLResponse:
+    """The actual `.thy` code behind one cell of the `/compare` grid.
+
+    Shows every run the model made on the exercise (campaign-scoped like the
+    grid it's linked from), with the run's final pass up front and the
+    intermediate passes collapsed, next to the human-verified statement so
+    you can check the model didn't change the theorem it was asked to prove.
+    """
+    selected_version = _selected_version(version, default=BENCHMARK_VERSION)
+    context: dict[str, Any] = {
+        "error": None,
+        "exercise_id": exercise_id,
+        "exercise": None,
+        "model": model,
+        "runs": [],
+        "version": selected_version,
+        "version_arg": _version_arg(selected_version),
+    }
+    try:
+        repo = _get_repo()
+        name = next(
+            (
+                ex["name"]
+                for ex in repo.list_benchmarkable_exercises()
+                if ex["id"] == exercise_id
+            ),
+            None,
+        )
+        if name is None:
+            raise ValueError(f"Exercise {exercise_id} not found")
+        context["exercise"] = repo.read(name)
+        passes = repo.list_passes_for_cell(exercise_id, model, selected_version)
+    except Exception as e:
+        context["error"] = str(e)
+        return templates.TemplateResponse(request, "solution.html.jinja", context)
+
+    by_run: dict[Any, list[dict[str, Any]]] = defaultdict(list)
+    for p in passes:
+        by_run[p["run_id"]].append(p)
+    runs = []
+    for run_id, run_passes in by_run.items():
+        run_passes.sort(key=lambda p: p["pass_number"])
+        runs.append(
+            {
+                "run_id": run_id,
+                "final": run_passes[-1],
+                "earlier": run_passes[:-1],
+                "has_log": (RUN_LOGS_DIR / f"{run_id}.jsonl").is_file(),
+            }
+        )
+    # Verified runs first, then newest: the proof you came to read leads.
+    runs.sort(key=lambda r: r["final"]["created_at"], reverse=True)
+    runs.sort(key=lambda r: not r["final"]["verified"])
+    context["runs"] = runs
+    return templates.TemplateResponse(request, "solution.html.jinja", context)
 
 
 @app.get("/model-history", response_class=HTMLResponse)

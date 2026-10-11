@@ -17,6 +17,9 @@
   .retry { background: #fdeee0; }
   .meta { background: #eee; font-weight: bold; }
   pre { white-space: pre-wrap; word-break: break-word; margin: 0.3rem 0 0; font-weight: normal; }
+  pre.thy { background: #fff; border: 1px solid #e5ddb0; border-radius: 4px; padding: 0.5rem 0.7rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+  .arg { margin: 0.2rem 0 0; }
+  .arg code { background: #f0ead0; padding: 0 0.25rem; border-radius: 3px; }
   .ts { color: #888; font-size: 0.8em; margin-top: 0.2rem; }
   .badge { padding: 0.15rem 0.6rem; border-radius: 4px; font-size: 0.85em; }
   .running { background: #ffe9a8; }
@@ -85,7 +88,18 @@ locally.</p>
     {% elif e.type == "text" %}
       <div class="event text"><strong>text</strong><pre>{{ e.content }}</pre><div class="ts">{{ e.ts }}</div></div>
     {% elif e.type == "tool_call" %}
-      <div class="event tool_call"><strong>tool call: {{ e.tool_name }}</strong><pre>{{ e.args }}</pre><div class="ts">{{ e.ts }}</div></div>
+      <div class="event tool_call"><strong>tool call: {{ e.tool_name }}</strong>
+        {% if e.args is mapping %}
+          {% for k, v in e.args.items() if k != "thy_content" %}
+            <div class="arg"><code>{{ k }}</code>: {{ v }}</div>
+          {% endfor %}
+          {% if "thy_content" in e.args %}
+            <pre class="thy">{{ e.args.thy_content }}</pre>
+          {% endif %}
+        {% else %}
+          <pre>{{ e.args }}</pre>
+        {% endif %}
+        <div class="ts">{{ e.ts }}</div></div>
     {% elif e.type == "tool_return" %}
       <div class="event tool_return {{ 'ok' if e.content and 'OK' in e.content else 'fail' }}">
         <strong>tool return: {{ e.tool_name }}</strong><pre>{{ e.content }}</pre><div class="ts">{{ e.ts }}</div></div>

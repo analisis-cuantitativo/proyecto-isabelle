@@ -12,6 +12,7 @@
   tfoot td { font-weight: 600; border-top: 2px solid #bbb; }
   a { color: #0b5fff; text-decoration: none; }
   a:hover { text-decoration: underline; }
+  a.badge { color: inherit; }
   .badge { padding: 0.15rem 0.6rem; border-radius: 4px; font-size: 0.85em; }
   .verified { background: #c8f0c8; }
   .failed { background: #f8c8c8; }
@@ -62,13 +63,15 @@ the number in parentheses is how many runs there were.</p>
 </thead>
 <tbody>
 {% for row in matrix %}
+{% set base = '/compare/solution?exercise_id=' ~ row.id ~ '&' ~ version_arg %}
 <tr>
   <td>{{ row.name }}</td>
   {% for c in row.cells %}
+  {% set href = base ~ '&model=' ~ models[loop.index0] | urlencode %}
   <td class="cell">
     {% if not c.num_runs %}<span class="none">&ndash;</span>
-    {% elif c.verified %}<span class="badge verified">verified ({{ c.num_runs }})</span>
-    {% else %}<span class="badge failed">failed ({{ c.num_runs }})</span>
+    {% elif c.verified %}<a href="{{ href }}" class="badge verified">verified ({{ c.num_runs }})</a>
+    {% else %}<a href="{{ href }}" class="badge failed">failed ({{ c.num_runs }})</a>
     {% endif %}
   </td>
   {% endfor %}

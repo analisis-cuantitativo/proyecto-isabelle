@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{% if exercise %}{{ exercise.name }}{% else %}Solution{% endif %} — {{ model }}</title>
+<style>
+  body { font-family: -apple-system, sans-serif; margin: 2rem; background: #fafafa; color: #222; max-width: 1000px; }
+  a { color: #0b5fff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  nav { margin-bottom: 1rem; }
+  nav a { margin-right: 1rem; }
+  pre.thy { background: #fff; border: 1px solid #e5ddb0; border-radius: 4px; padding: 0.5rem 0.7rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; white-space: pre-wrap; word-break: break-word; margin: 0.3rem 0 0.8rem; }
+  pre.errors { background: #fbe8e8; border-color: #f0b8b8; }
+  pre.statement { border-color: #bcd0f5; }
+  .run { background: #fff; border: 1px solid #ddd; border-left: 4px solid #bbb; border-radius: 6px; padding: 0.7rem 1rem; margin-bottom: 1.2rem; }
+  .run.verified { border-left-color: #4caf50; }
+  .run.failed { border-left-color: #d9534f; }
+  .badge { padding: 0.15rem 0.6rem; border-radius: 4px; font-size: 0.85em; }
+  .badge.verified { background: #c8f0c8; }
+  .badge.failed { background: #f8c8c8; }
+  .badge.warn { background: #ffe9a8; }
+  .meta { color: #666; font-size: 0.85em; margin: 0.3rem 0; }
+  details { margin: 0.4rem 0; }
+  summary { cursor: pointer; color: #555; }
+  code { background: #f0f0f0; padding: 0 0.25rem; border-radius: 3px; }
+  .error { background: #fbe8e8; border: 1px solid #f0b8b8; border-radius: 6px; padding: 0.8rem 1rem; }
+  .math { background: #fff; border: 1px solid #bcd0f5; border-radius: 4px; padding: 0.5rem 0.9rem; white-space: pre-wrap; line-height: 1.5; margin: 0.3rem 0 0.8rem; }
+</style>
+{% include "_katex.html.jinja" %}
+</head>
+<body>
+<nav><a href="/compare?{{ version_arg }}">&larr; Compare models</a><a href="/benchmark?model={{ model | urlencode }}&amp;{{ version_arg }}">{{ model }} coverage</a></nav>
+
+{% if error %}
+<div class="error"><p>Couldn't load this solution:</p><pre>{{ error }}</pre></div>
+{% else %}
+<h1>{{ exercise.name }}</h1>
+<p class="meta">Model <code>{{ model }}</code> &middot; {{ "campaign v%s" % version if version is not none else "all campaigns" }}</p>
+
+{% if exercise.statement %}
+<h3>Statement</h3>
+<div class="math">{{ exercise.statement }}</div>
+{% endif %}
+{% if exercise.corrected_thy_code %}
+<details>
+  <summary>Human-verified .thy statement</summary>
+  <pre class="thy statement">{{ exercise.corrected_thy_code }}</pre>
+</details>
+{% endif %}
+
+{% macro passinfo(p) %}
+  <span class="badge {{ 'verified' if p.verified else 'failed' }}">{{ 'verified' if p.verified else 'failed' }}</span>
+  {% if 'sorry' in p.thy_content or 'oops' in p.thy_content %}<span class="badge warn">contains sorry/oops</span>{% endif %}
+  <span class="meta">pass {{ p.pass_number }} &middot; {{ p.tokens_consumed }} tokens cumulative{% if p.version is not none %} &middot; v{{ p.version }}{% endif %}</span>
+{% endmacro %}
+
+{% if not runs %}
+<p>No runs of this model on this exercise{% if version is not none %} in campaign v{{ version }}{% endif %}.</p>
+{% endif %}
+
+{% for r in runs %}
+<div class="run {{ 'verified' if r.final.verified else 'failed' }}">
+  <strong>Run <code>{{ r.run_id }}</code></strong>
+  {% if r.final.hit_retry_budget %}<span class="badge warn">hit retry budget</span>{% endif %}
+  {% if r.has_log %}&middot; <a href="/runs/{{ r.run_id }}">trace</a>{% endif %}
+  <div>{{ passinfo(r.final) }}</div>
+  <pre class="thy">{{ r.final.thy_content }}</pre>
+  {% if r.final.errors %}
+  <pre class="thy errors">{{ r.final.errors | join("\n") }}</pre>
+  {% endif %}
+  {% if r.earlier %}
+  <details>
+    <summary>{{ r.earlier | length }} earlier pass{{ '' if r.earlier | length == 1 else 'es' }}</summary>
+    {% for p in r.earlier %}
+    <div>{{ passinfo(p) }}</div>
+    <pre class="thy">{{ p.thy_content }}</pre>
+    {% if p.errors %}<pre class="thy errors">{{ p.errors | join("\n") }}</pre>{% endif %}
+    {% endfor %}
+  </details>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+</body>
+</html>
