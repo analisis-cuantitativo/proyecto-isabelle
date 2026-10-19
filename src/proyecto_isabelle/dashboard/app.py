@@ -788,3 +788,103 @@ def show_model_history(
             results, exercises, selected_a, selected_b
         )
     return templates.TemplateResponse(request, "model_history.html.jinja", context)
+
+
+JUDGE_CATEGORIES = (
+    "exact_match",
+    "equivalent_reformulation",
+    "weaker_than_intended",
+    "stronger_than_intended",
+    "different_theorem",
+    "cannot_determine",
+)
+
+
+@app.get("/judge", response_class=HTMLResponse)
+def show_judge(request: Request, version: str | None = None) -> HTMLResponse:
+    """LLM-as-a-judge verdicts on whether verified proofs state the right theorem.
+
+    Reads the local verdict cache (`analysis.formalization_judge`) and keeps
+    only verdicts for each run's *current* verified final pass in the selected
+    campaign -- the cache also holds verdicts for superseded passes, which
+    must not be counted. Filtering by model/category/verdict happens
+    client-side so the page can be driven live during a presentation.
+    """
+    from proyecto_isabelle.analysis.data import display_model_name
+    from proyecto_isabelle.analysis.formalization_judge import load_cache
+
+    selected_version = _selected_version(version, default=BENCHMARK_VERSION)
+    context: dict[str, Any] = {
+        "error": None,
+        "rows": [],
+        "summary": [],
+        "categories": JUDGE_CATEGORIES,
+        "unjudged": 0,
+        "version": selected_version,
+        "version_arg": _version_arg(selected_version),
+        "campaigns": [],
+        "campaign": None,
+        "current_version": BENCHMARK_VERSION,
+    }
+    try:
+        from proyecto_isabelle.analysis.formalization_judge import rows_to_judge
+
+        repo = _get_repo()
+        context.update(_campaign_context(repo, selected_version))
+        finals = rows_to_judge(repo, version=selected_version)
+    except Exception as e:
+        context["error"] = str(e)
+        return templates.TemplateResponse(request, "judge.html.jinja", context)
+
+    cache = load_cache()
+    rows = []
+    for f in finals.itertuples():
+        verdict = cache.get(int(f.id))
+        if verdict is None:
+            context["unjudged"] += 1
+            continue
+        rows.append(
+            {
+                "benchmark_id": int(f.id),
+                "exercise_id": int(f.exercise_id),
+                "exercise_name": verdict["exercise_name"],
+                "model": verdict["model_name"],
+                "model_label": display_model_name(verdict["model_name"]),
+                "judge_model": verdict["judge_model"],
+                "self_judged": verdict["judge_model"] == verdict["model_name"],
+                "faithful": verdict["faithful"],
+                "category": verdict["category"],
+                "issues": verdict["issues"],
+                "reasoning": verdict["reasoning"],
+                "statement": f.statement,
+                "thy_content": f.thy_content,
+            }
+        )
+    rows.sort(
+        key=lambda r: (
+            JUDGE_CATEGORIES.index(r["category"]),
+            r["exercise_name"],
+            r["model_label"],
+        )
+    )
+
+    by_model: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        m = by_model.setdefault(
+            r["model"],
+            {
+                "model": r["model"],
+                "label": r["model_label"],
+                "judged": 0,
+                "faithful": 0,
+                "counts": dict.fromkeys(JUDGE_CATEGORIES, 0),
+            },
+        )
+        m["judged"] += 1
+        m["faithful"] += r["faithful"]
+        m["counts"][r["category"]] += 1
+    context.update(
+        rows=rows,
+        summary=sorted(by_model.values(), key=lambda m: m["faithful"] / m["judged"]),
+    )
+    return templates.TemplateResponse(request, "judge.html.jinja", context)

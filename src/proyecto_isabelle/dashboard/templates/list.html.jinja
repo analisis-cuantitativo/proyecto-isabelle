@@ -26,7 +26,7 @@
 </style>
 </head>
 <body>
-<nav><a href="/?{{ version_arg }}">Runs</a><a href="/benchmark?{{ version_arg }}">Benchmark coverage</a><a href="/compare?{{ version_arg }}">Compare models</a><a href="/model-history{% if model %}?model={{ model }}{% endif %}">Model across campaigns</a></nav>
+<nav><a href="/?{{ version_arg }}">Runs</a><a href="/benchmark?{{ version_arg }}">Benchmark coverage</a><a href="/compare?{{ version_arg }}">Compare models</a><a href="/judge?{{ version_arg }}">LLM-as-a-judge</a><a href="/model-history{% if model %}?model={{ model }}{% endif %}">Model across campaigns</a></nav>
 <h1>Proof Agent Runs</h1>
 <form class="filters" method="get">
   <label>Campaign:
